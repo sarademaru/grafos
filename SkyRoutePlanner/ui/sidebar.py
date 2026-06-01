@@ -44,10 +44,16 @@ class Sidebar(QtWidgets.QFrame):
 
     def set_default_selection(self):
         if self.buttons:
-            self.buttons[0].setChecked(True)
-            self.menu_selected.emit(0)
+            self.select_index(0)
 
-    def on_menu_clicked(self, index):
+    def select_index(self, index):
+        if index < 0 or index >= len(self.buttons):
+            return
+
         for idx, button in enumerate(self.buttons):
             button.setChecked(idx == index)
+
         self.menu_selected.emit(index)
+
+    def on_menu_clicked(self, index):
+        self.select_index(index)

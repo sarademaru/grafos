@@ -1,4 +1,4 @@
-from PyQt6 import QtWidgets, QtCore
+﻿from PyQt6 import QtWidgets, QtCore
 from .sidebar import Sidebar
 from .pages import (
     PaginaInicio,
@@ -14,8 +14,9 @@ class MainWindow(QtWidgets.QMainWindow):
 
     def __init__(self):
         super().__init__()
+        self.grafo = None
         self.setWindowTitle("SkyRoute Planner")
-        self.resize(1200, 800)
+        self.resize(1200, 850)
         self._setup_ui()
 
     def _setup_ui(self):
@@ -46,13 +47,13 @@ class MainWindow(QtWidgets.QMainWindow):
         title_label = QtWidgets.QLabel("SkyRoute Planner")
         title_label.setObjectName("headerTitle")
 
-        status_label = QtWidgets.QLabel("Status: Ready")
-        status_label.setObjectName("headerStatus")
-        status_label.setAlignment(QtCore.Qt.AlignmentFlag.AlignRight | QtCore.Qt.AlignmentFlag.AlignVCenter)
+        self.status_label = QtWidgets.QLabel("Status: Ready")
+        self.status_label.setObjectName("headerStatus")
+        self.status_label.setAlignment(QtCore.Qt.AlignmentFlag.AlignRight | QtCore.Qt.AlignmentFlag.AlignVCenter)
 
         header_layout.addWidget(title_label)
         header_layout.addStretch()
-        header_layout.addWidget(status_label)
+        header_layout.addWidget(self.status_label)
 
         return header
 
@@ -65,12 +66,17 @@ class MainWindow(QtWidgets.QMainWindow):
         self.sidebar = Sidebar()
         self.sidebar.menu_selected.connect(self.on_menu_selected)
 
+        self.planificador_page = PaginaPlanificador()
+        self.config_page = PaginaConfiguracion()
+        self.config_page.graph_loaded.connect(self.on_graph_loaded)
+        self.config_page.system_reset.connect(self.on_system_reset)
+
         self.page_stack = QtWidgets.QStackedWidget()
         self.page_stack.addWidget(PaginaInicio())
-        self.page_stack.addWidget(PaginaPlanificador())
+        self.page_stack.addWidget(self.planificador_page)
         self.page_stack.addWidget(PaginaViajeDinamico())
         self.page_stack.addWidget(PaginaReportes())
-        self.page_stack.addWidget(PaginaConfiguracion())
+        self.page_stack.addWidget(self.config_page)
 
         body_layout.addWidget(self.sidebar)
         body_layout.addWidget(self.page_stack, stretch=1)
@@ -108,7 +114,7 @@ class MainWindow(QtWidgets.QMainWindow):
                 font-weight: 700;
             }
             #headerStatus {
-                color: #9ca3af;
+                color: #d8b4fe;
                 font-size: 14px;
             }
             #sidebar {
@@ -130,11 +136,11 @@ class MainWindow(QtWidgets.QMainWindow):
                 font-size: 14px;
             }
             QPushButton#sidebarButton:hover {
-                background: #cb9bde;
+                background: #6d28d9;
                 color: #ffffff;
             }
             QPushButton#sidebarButton:checked {
-                background: #af69cd;
+                background: #7c3aed;
                 color: #ffffff;
             }
             QFrame#footer {
@@ -156,10 +162,83 @@ class MainWindow(QtWidgets.QMainWindow):
             QLabel#pageTitle {
                 font-size: 32px;
                 font-weight: 700;
-                color: #111827;
+                color: #f8fafc;
+            }
+            QFrame#infoFrame {
+                background: #1f2937;
+                border: 1px solid #4c1d95;
+                border-radius: 12px;
+            }
+            QLabel#infoLabel {
+                color: #cbd5e1;
+                font-size: 14px;
+            }
+            QLabel#infoValue {
+                color: #f8fafc;
+                font-size: 16px;
+                font-weight: 600;
+            }
+            QPushButton#primaryButton {
+                background: #8b5cf6;
+                color: #ffffff;
+                padding: 10px 16px;
+                border: none;
+                border-radius: 8px;
+            }
+            QPushButton#primaryButton:hover {
+                background: #a78bfa;
+            }
+            QComboBox {
+                background: #1f2937;
+                color: #f8fafc;
+                border: 1px solid #4c1d95;
+                padding: 8px;
+                border-radius: 6px;
+            }
+            QComboBox QAbstractItemView {
+                background: #111827;
+                color: #f8fafc;
+            }
+            QLabel#sectionTitle {
+                color: #d8b4fe;
+                font-size: 18px;
+                font-weight: 600;
+            }
+            QFrame#controlPanel {
+                background: #111827;
+                border: 1px solid #4c1d95;
+                border-radius: 16px;
+            }
+            QFrame#legendBox {
+                background: #111827;
+                border: 1px solid #4c1d95;
+                border-radius: 12px;
+            }
+            QLabel#legendLabel {
+                color: #f8fafc;
+                font-size: 13px;
+            }
+            QLabel#statusBanner {
+                color: #86efac;
+                font-size: 16px;
+                font-weight: 600;
             }
         """
 
     def on_menu_selected(self, index):
         self.page_stack.setCurrentIndex(index)
         self.log_view.append(f"Switched to page index {index}.")
+
+    def on_graph_loaded(self, grafo):
+        self.grafo = grafo
+        self.planificador_page.set_graph(grafo)
+        self.sidebar.select_index(1)
+        self.page_stack.setCurrentIndex(1)
+        self.status_label.setText("Status: Graph loaded")
+        self.log_view.append(f"Loaded graph with {grafo.cantidad_vertices()} airports.")
+
+    def on_system_reset(self):
+        self.grafo = None
+        self.planificador_page.clear_graph()
+        self.status_label.setText("Status: System reset")
+        self.log_view.append("System reset requested.")
