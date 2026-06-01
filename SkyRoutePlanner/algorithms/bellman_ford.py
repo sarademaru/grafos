@@ -13,7 +13,7 @@ def bellman_ford(grafo, start_id):
             for arista in vertex.adyacencias:
                 u = vertex.identificador
                 v = arista.vertice_destino.identificador
-                weight = arista.getPeso()
+                weight = arista.obtener_peso()
                 if distances[u] + weight < distances[v]:
                     distances[v] = distances[u] + weight
                     previous[v] = u
@@ -25,7 +25,7 @@ def bellman_ford(grafo, start_id):
         for arista in vertex.adyacencias:
             u = vertex.identificador
             v = arista.vertice_destino.identificador
-            if distances[u] + arista.getPeso() < distances[v]:
+            if distances[u] + arista.obtener_peso() < distances[v]:
                 raise ValueError("Graph contains a negative-weight cycle")
 
     return distances, previous

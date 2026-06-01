@@ -20,7 +20,7 @@ def dijkstra(grafo, start_id):
 
         for arista in current_vertex.adyacencias:
             neighbor = arista.vertice_destino
-            alt = current_distance + arista.getPeso()
+            alt = current_distance + arista.obtener_peso()
             if alt < distances[neighbor.identificador]:
                 distances[neighbor.identificador] = alt
                 previous[neighbor.identificador] = current_id
