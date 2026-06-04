@@ -11,6 +11,53 @@ def _get_value(dct, keys, default=None):
     return default
 
 
+def _normalize_aeronaves_config(aeronaves_config):
+    normalized = {}
+    if not isinstance(aeronaves_config, dict):
+        return normalized
+
+    for tipo, datos in aeronaves_config.items():
+        if not isinstance(datos, dict):
+            continue
+        normalized[tipo] = {
+            "costoKm": _get_value(datos, ["costoKm", "costPerKm", "cost_per_km"], 0),
+            "tiempoKm": _get_value(datos, ["tiempoKm", "timePerKm", "time_per_km"], 0),
+        }
+    return normalized
+
+
+def _parse_configuracion(datos):
+    configuracion = _get_value(datos, ["configuracion", "configuration"], {})
+    if not isinstance(configuracion, dict):
+        return {
+            "presupuestoMinimoPorcentaje": 35,
+            "intervaloAlimentacionHoras": 8,
+            "intervaloHospedajeHoras": 20,
+            "aeronaves": {},
+        }
+
+    return {
+        "presupuestoMinimoPorcentaje": _get_value(
+            configuracion,
+            ["presupuestoMinimoPorcentaje", "minimumBudgetPercentage"],
+            35,
+        ),
+        "intervaloAlimentacionHoras": _get_value(
+            configuracion,
+            ["intervaloAlimentacionHoras", "feedingIntervalHours"],
+            8,
+        ),
+        "intervaloHospedajeHoras": _get_value(
+            configuracion,
+            ["intervaloHospedajeHoras", "lodgingIntervalHours"],
+            20,
+        ),
+        "aeronaves": _normalize_aeronaves_config(
+            _get_value(configuracion, ["aeronaves", "aircraft"], {}),
+        ),
+    }
+
+
 def cargar_json(ruta_archivo):
     """Load a graph from a JSON file.
 
@@ -20,6 +67,8 @@ def cargar_json(ruta_archivo):
     - A dict with 'airports' and 'routes' (alternate schema)
 
     The loader will create missing vertices when edges reference them.
+    Global configuration values can be read from a top-level
+    'configuracion' section and are stored in the returned Grafo.
     """
     ruta = Path(ruta_archivo)
     if not ruta.exists():
@@ -29,6 +78,8 @@ def cargar_json(ruta_archivo):
         datos = json.load(archivo)
 
     grafo = Grafo()
+    if isinstance(datos, dict):
+        grafo.configuracion = _parse_configuracion(datos)
 
     # Helper to add an airport dict to the graph
     def _add_airport(a):

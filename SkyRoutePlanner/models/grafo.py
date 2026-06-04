@@ -9,6 +9,35 @@ class Grafo:
 
     def __init__(self):
         self.vertices = {}
+        self.configuracion = {
+            "presupuestoMinimoPorcentaje": 35,
+            "intervaloAlimentacionHoras": 8,
+            "intervaloHospedajeHoras": 20,
+            "aeronaves": {},
+        }
+
+    def obtener_configuracion(self):
+        """Devuelve la configuración global del grafo."""
+        return {
+            "presupuestoMinimoPorcentaje": self.configuracion.get("presupuestoMinimoPorcentaje", 35),
+            "intervaloAlimentacionHoras": self.configuracion.get("intervaloAlimentacionHoras", 8),
+            "intervaloHospedajeHoras": self.configuracion.get("intervaloHospedajeHoras", 20),
+            "aeronaves": dict(self.configuracion.get("aeronaves", {})),
+        }
+
+    def obtener_aeronaves_disponibles(self):
+        """Devuelve los tipos de aeronaves definidos en la configuración."""
+        return list(self.configuracion.get("aeronaves", {}).keys())
+
+    def obtener_costo_por_km(self, tipo_aeronave):
+        """Devuelve el costo por kilómetro para un tipo de aeronave."""
+        aeronave = self.configuracion.get("aeronaves", {}).get(tipo_aeronave, {})
+        return aeronave.get("costoKm", 0)
+
+    def obtener_tiempo_por_km(self, tipo_aeronave):
+        """Devuelve el tiempo por kilómetro para un tipo de aeronave."""
+        aeronave = self.configuracion.get("aeronaves", {}).get(tipo_aeronave, {})
+        return aeronave.get("tiempoKm", 0)
 
     def agregar_vertice(
         self,
