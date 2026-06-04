@@ -252,3 +252,8 @@ class GraphView(QGraphicsView):
             self.scale(zoom_in_factor, zoom_in_factor)
         else:
             self.scale(zoom_out_factor, zoom_out_factor)
+
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        if self.grafo:
+            self._zoom_to_fit()

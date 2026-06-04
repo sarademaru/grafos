@@ -32,7 +32,7 @@ class MainWindow(QtWidgets.QMainWindow):
         footer_widget = self._build_footer()
 
         main_layout.addWidget(header_widget)
-        main_layout.addWidget(body_widget)
+        main_layout.addWidget(body_widget, stretch=1)
         main_layout.addWidget(footer_widget)
 
         self.setStyleSheet(self._load_styles())
@@ -86,8 +86,10 @@ class MainWindow(QtWidgets.QMainWindow):
     def _build_footer(self):
         footer = QtWidgets.QFrame()
         footer.setObjectName("footer")
+        footer.setMaximumHeight(96)
         footer_layout = QtWidgets.QVBoxLayout(footer)
-        footer_layout.setContentsMargins(24, 16, 24, 16)
+        footer_layout.setContentsMargins(24, 6, 24, 8)
+        footer_layout.setSpacing(4)
 
         log_title = QtWidgets.QLabel("System Log")
         log_title.setObjectName("logTitle")
@@ -95,6 +97,8 @@ class MainWindow(QtWidgets.QMainWindow):
         self.log_view = QtWidgets.QTextEdit()
         self.log_view.setReadOnly(True)
         self.log_view.setObjectName("logView")
+        self.log_view.setMinimumHeight(42)
+        self.log_view.setMaximumHeight(54)
         self.log_view.setPlainText("Application initialized. Navigation is ready.")
 
         footer_layout.addWidget(log_title)
@@ -149,7 +153,7 @@ class MainWindow(QtWidgets.QMainWindow):
             }
             QLabel#logTitle {
                 color: #e2e8f0;
-                font-size: 16px;
+                font-size: 13px;
                 font-weight: 600;
             }
             QTextEdit#logView {
@@ -157,7 +161,17 @@ class MainWindow(QtWidgets.QMainWindow):
                 color: #e2e8f0;
                 border: 1px solid #334155;
                 font-family: Consolas, monospace;
-                min-height: 160px;
+                font-size: 11px;
+                min-height: 42px;
+            }
+            QTextEdit#routeResults {
+                background: #0f172a;
+                color: #e2e8f0;
+                border: 1px solid #334155;
+                border-radius: 6px;
+                font-family: Consolas, monospace;
+                font-size: 12px;
+                padding: 8px;
             }
             QLabel#pageTitle {
                 font-size: 32px;
@@ -207,7 +221,28 @@ class MainWindow(QtWidgets.QMainWindow):
             QFrame#controlPanel {
                 background: #111827;
                 border: 1px solid #4c1d95;
-                border-radius: 16px;
+                border-radius: 8px;
+            }
+            QScrollArea#plannerScroll {
+                background: transparent;
+                border: none;
+            }
+            QScrollArea#plannerScroll > QWidget > QWidget {
+                background: transparent;
+            }
+            QScrollBar:vertical {
+                background: #1f2937;
+                width: 10px;
+                margin: 0;
+            }
+            QScrollBar::handle:vertical {
+                background: #8b5cf6;
+                border-radius: 5px;
+                min-height: 28px;
+            }
+            QScrollBar::add-line:vertical,
+            QScrollBar::sub-line:vertical {
+                height: 0;
             }
             QFrame#legendBox {
                 background: #111827;

@@ -1,26 +1,33 @@
-from PyQt6 import QtWidgets, QtCore
+from PyQt6 import QtCore, QtWidgets
 from PyQt6.QtWidgets import (
-    QLabel,
-    QComboBox,
-    QPushButton,
-    QFrame,
-    QHBoxLayout,
-    QVBoxLayout,
-    QFormLayout,
-    QSpinBox,
-    QDoubleSpinBox,
-    QCheckBox,
-    QRadioButton,
     QButtonGroup,
+    QCheckBox,
+    QComboBox,
+    QDoubleSpinBox,
+    QFormLayout,
+    QFrame,
     QGroupBox,
+    QHBoxLayout,
+    QLabel,
     QMessageBox,
+    QPushButton,
+    QRadioButton,
+    QScrollArea,
+    QSpinBox,
+    QVBoxLayout,
 )
 
+from algorithms.itinerary_planner import (
+    CRITERION_COST,
+    CRITERION_DISTANCE,
+    CRITERION_TIME,
+    plan_itinerary,
+)
 from ui.graph_view import GraphView
 
 
 class PaginaPlanificador(QtWidgets.QWidget):
-    """Route planner page for graph visualization and future route tools."""
+    """Pagina para visualizar el grafo y planificar rutas."""
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -37,7 +44,6 @@ class PaginaPlanificador(QtWidgets.QWidget):
         title = QLabel("Planificador de Rutas")
         title.setObjectName("pageTitle")
         title.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
-
         main_layout.addWidget(title)
 
         content_layout = QHBoxLayout()
@@ -45,7 +51,8 @@ class PaginaPlanificador(QtWidgets.QWidget):
 
         control_panel = QFrame()
         control_panel.setObjectName("controlPanel")
-        control_panel.setMinimumWidth(320)
+        control_panel.setMinimumWidth(360)
+        control_panel.setMaximumWidth(460)
         control_layout = QVBoxLayout(control_panel)
         control_layout.setContentsMargins(16, 16, 16, 16)
         control_layout.setSpacing(16)
@@ -56,7 +63,6 @@ class PaginaPlanificador(QtWidgets.QWidget):
         self.origin_combo = QComboBox()
         self.dest_combo = QComboBox()
 
-        # Presupuesto y tiempo
         self.budget_spin = QDoubleSpinBox()
         self.budget_spin.setPrefix("$")
         self.budget_spin.setMaximum(1e9)
@@ -70,7 +76,6 @@ class PaginaPlanificador(QtWidgets.QWidget):
         self.time_spin.setSuffix(" h")
         self.time_spin.setValue(1)
 
-        # Criterios de optimización
         criteria_box = QGroupBox()
         criteria_box.setObjectName("criteriaBox")
         criteria_layout = QVBoxLayout(criteria_box)
@@ -82,7 +87,6 @@ class PaginaPlanificador(QtWidgets.QWidget):
         criteria_layout.addWidget(self.crit_time)
         criteria_layout.addWidget(self.crit_cost)
 
-        # Aeropuertos secundarios (radio)
         secondary_box = QGroupBox()
         secondary_box.setObjectName("secondaryBox")
         secondary_layout = QVBoxLayout(secondary_box)
@@ -96,24 +100,23 @@ class PaginaPlanificador(QtWidgets.QWidget):
         secondary_layout.addWidget(self.sec_include)
         secondary_layout.addWidget(self.sec_exclude)
 
-        # Tipos de transporte
         transport_box = QGroupBox()
         transport_box.setObjectName("transportBox")
         transport_layout = QVBoxLayout(transport_box)
         transport_layout.setContentsMargins(6, 6, 6, 6)
-        self.tr_commercial = QCheckBox("Avión Comercial")
-        self.tr_regional = QCheckBox("Avión Regional")
-        self.tr_prop = QCheckBox("Hélice")
-        for cb in (self.tr_commercial, self.tr_regional, self.tr_prop):
-            cb.setChecked(True)
-            transport_layout.addWidget(cb)
+        self.tr_commercial = QCheckBox("Avion Comercial")
+        self.tr_regional = QCheckBox("Avion Regional")
+        self.tr_prop = QCheckBox("Helice")
+        for checkbox in (self.tr_commercial, self.tr_regional, self.tr_prop):
+            checkbox.setChecked(True)
+            transport_layout.addWidget(checkbox)
 
         form_layout = QFormLayout()
         form_layout.addRow("Origen", self.origin_combo)
         form_layout.addRow("Destino", self.dest_combo)
         form_layout.addRow("Presupuesto inicial (USD)", self.budget_spin)
         form_layout.addRow("Tiempo disponible (horas)", self.time_spin)
-        form_layout.addRow("Criterios de optimización", criteria_box)
+        form_layout.addRow("Criterios de optimizacion", criteria_box)
         form_layout.addRow("Aeropuertos secundarios", secondary_box)
         form_layout.addRow("Tipos de transporte preferidos", transport_box)
 
@@ -122,7 +125,15 @@ class PaginaPlanificador(QtWidgets.QWidget):
         self.calculate_button.setCursor(QtCore.Qt.CursorShape.PointingHandCursor)
         self.calculate_button.clicked.connect(self.on_calculate_route)
 
-        
+        self.selected_info = QLabel("Seleccione un aeropuerto para ver mas informacion.")
+        self.selected_info.setWordWrap(True)
+        self.selected_info.setObjectName("infoLabel")
+
+        self.results_view = QtWidgets.QTextEdit()
+        self.results_view.setReadOnly(True)
+        self.results_view.setObjectName("routeResults")
+        self.results_view.setMinimumHeight(150)
+        self.results_view.setPlainText("Los resultados del itinerario apareceran aqui.")
 
         legend_label = QLabel("Leyenda")
         legend_label.setObjectName("sectionTitle")
@@ -131,46 +142,54 @@ class PaginaPlanificador(QtWidgets.QWidget):
         legend_layout = QVBoxLayout(legend)
         legend_layout.setContentsMargins(0, 0, 0, 0)
         legend_layout.setSpacing(8)
-        legend_layout.addWidget(QLabel("🟠 Hub"))
-        legend_layout.addWidget(QLabel("🔵 Aeropuerto Secundario"))
+        legend_layout.addWidget(QLabel("Hub"))
+        legend_layout.addWidget(QLabel("Aeropuerto Secundario"))
 
         info_box = QFrame()
         info_box.setObjectName("infoFrame")
         info_box_layout = QVBoxLayout(info_box)
         info_box_layout.setContentsMargins(12, 12, 12, 12)
         info_box_layout.setSpacing(10)
-
         info_box_layout.addWidget(QLabel("Aeropuerto seleccionado"))
-        self.selected_code = QLabel("Código: -")
+
+        self.selected_code = QLabel("Codigo: -")
         self.selected_name = QLabel("Nombre: -")
         self.selected_city = QLabel("Ciudad: -")
-        self.selected_country = QLabel("País: -")
+        self.selected_country = QLabel("Pais: -")
         self.selected_timezone = QLabel("Zona Horaria: -")
 
-        for widget in [self.selected_code, self.selected_name, self.selected_city, self.selected_country, self.selected_timezone]:
+        for widget in [
+            self.selected_code,
+            self.selected_name,
+            self.selected_city,
+            self.selected_country,
+            self.selected_timezone,
+        ]:
             widget.setObjectName("infoValue")
             info_box_layout.addWidget(widget)
 
         control_layout.addWidget(section_label)
         control_layout.addLayout(form_layout)
         control_layout.addWidget(self.calculate_button)
-        # Mensajes informativos
-        self.selected_info = QtWidgets.QLabel("Seleccione un aeropuerto para ver más información.")
-        self.selected_info.setWordWrap(True)
-        self.selected_info.setObjectName("infoLabel")
         control_layout.addWidget(self.selected_info)
+        control_layout.addWidget(self.results_view)
         control_layout.addWidget(legend_label)
         control_layout.addWidget(legend)
         control_layout.addWidget(info_box)
         control_layout.addStretch()
 
+        control_scroll = QScrollArea()
+        control_scroll.setObjectName("plannerScroll")
+        control_scroll.setWidgetResizable(True)
+        control_scroll.setHorizontalScrollBarPolicy(QtCore.Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        control_scroll.setWidget(control_panel)
+
         graph_layout = QVBoxLayout()
         graph_layout.setContentsMargins(0, 0, 0, 0)
         graph_layout.addWidget(self.graph_view)
 
-        content_layout.addWidget(control_panel)
+        content_layout.addWidget(control_scroll)
         content_layout.addLayout(graph_layout, stretch=1)
-
         main_layout.addLayout(content_layout)
 
     def set_graph(self, grafo):
@@ -183,6 +202,7 @@ class PaginaPlanificador(QtWidgets.QWidget):
         self.graph_view.clear_graph()
         self.origin_combo.clear()
         self.dest_combo.clear()
+        self.results_view.setPlainText("Los resultados del itinerario apareceran aqui.")
         self._clear_selected_info()
 
     def _refresh_airports(self):
@@ -194,54 +214,55 @@ class PaginaPlanificador(QtWidgets.QWidget):
             self.dest_combo.addItems(codes)
 
     def _clear_selected_info(self):
-        self.selected_code.setText("Código: -")
+        self.selected_code.setText("Codigo: -")
         self.selected_name.setText("Nombre: -")
         self.selected_city.setText("Ciudad: -")
-        self.selected_country.setText("País: -")
+        self.selected_country.setText("Pais: -")
         self.selected_timezone.setText("Zona Horaria: -")
 
     def on_node_selected(self, vertice):
-        self.selected_code.setText(f"Código: {vertice.identificador}")
+        self.selected_code.setText(f"Codigo: {vertice.identificador}")
         self.selected_name.setText(f"Nombre: {vertice.nombre}")
         self.selected_city.setText(f"Ciudad: {vertice.ciudad}")
-        self.selected_country.setText(f"País: {vertice.pais}")
+        self.selected_country.setText(f"Pais: {vertice.pais}")
         self.selected_timezone.setText(f"Zona Horaria: {vertice.zona_horaria}")
 
     def on_calculate_route(self):
         if not self.grafo:
             self.selected_info.setText("Carga un archivo JSON antes de calcular la ruta.")
             return
+
         origen = self.origin_combo.currentText()
         destino = self.dest_combo.currentText()
 
-        # Validaciones básicas
         if origen == destino:
             msg = "Origen y destino no pueden ser iguales."
-            QMessageBox.warning(self, "Validación", msg)
+            QMessageBox.warning(self, "Validacion", msg)
             self.selected_info.setText(msg)
             return
 
         criterios = [
-            ("Distancia", self.crit_dist.isChecked()),
-            ("Tiempo", self.crit_time.isChecked()),
-            ("Costo", self.crit_cost.isChecked()),
+            (CRITERION_DISTANCE, "Distancia", self.crit_dist.isChecked()),
+            (CRITERION_TIME, "Tiempo", self.crit_time.isChecked()),
+            (CRITERION_COST, "Costo", self.crit_cost.isChecked()),
         ]
-        criterios_sel = [c for c, sel in criterios if sel]
+        criterios_sel = [key for key, _, selected in criterios if selected]
+        criterios_texto = [label for _, label, selected in criterios if selected]
         if not criterios_sel:
-            msg = "Debe seleccionar al menos un criterio de optimización."
-            QMessageBox.warning(self, "Validación", msg)
+            msg = "Debe seleccionar al menos un criterio de optimizacion."
+            QMessageBox.warning(self, "Validacion", msg)
             self.selected_info.setText(msg)
             return
 
         transportes = [
-            ("Avión Comercial", self.tr_commercial.isChecked()),
-            ("Avión Regional", self.tr_regional.isChecked()),
-            ("Hélice", self.tr_prop.isChecked()),
+            ("Avion Comercial", self.tr_commercial.isChecked()),
+            ("Avion Regional", self.tr_regional.isChecked()),
+            ("Helice", self.tr_prop.isChecked()),
         ]
-        transportes_sel = [t for t, sel in transportes if sel]
+        transportes_sel = [transport for transport, selected in transportes if selected]
         if not transportes_sel:
             msg = "Debe seleccionar al menos un tipo de transporte."
-            QMessageBox.warning(self, "Validación", msg)
+            QMessageBox.warning(self, "Validacion", msg)
             self.selected_info.setText(msg)
             return
 
@@ -249,24 +270,77 @@ class PaginaPlanificador(QtWidgets.QWidget):
         tiempo = self.time_spin.value()
         if presupuesto <= 0:
             msg = "El presupuesto debe ser mayor que cero."
-            QMessageBox.warning(self, "Validación", msg)
+            QMessageBox.warning(self, "Validacion", msg)
             self.selected_info.setText(msg)
             return
         if tiempo <= 0:
             msg = "El tiempo disponible debe ser mayor que cero."
-            QMessageBox.warning(self, "Validación", msg)
+            QMessageBox.warning(self, "Validacion", msg)
             self.selected_info.setText(msg)
             return
 
-        # Resumen informativo (sin ejecutar algoritmos aún)
+        resultado = plan_itinerary(
+            grafo=self.grafo,
+            origin_id=origen,
+            destination_id=destino,
+            budget=presupuesto,
+            available_time=tiempo,
+            criteria=criterios_sel,
+            selected_transports=transportes_sel,
+            include_secondary=self.sec_include.isChecked(),
+        )
+
         sec_text = "Incluir" if self.sec_include.isChecked() else "Excluir"
         resumen = (
-            f"Validación exitosa.\nOrigen: {origen} → Destino: {destino}\n"
-            f"Criterios: {', '.join(criterios_sel)}\n"
+            f"Origen: {origen} -> Destino: {destino}\n"
+            f"Criterios: {', '.join(criterios_texto)}\n"
             f"Transportes: {', '.join(transportes_sel)}\n"
             f"Aeropuertos secundarios: {sec_text}\n"
-            f"Presupuesto: ${presupuesto:.2f}, Tiempo: {tiempo} h\n"
-            "Se generará una ruta por cada criterio seleccionado (implementación próximamente)."
+            f"Presupuesto: ${presupuesto:.2f}, Tiempo: {tiempo} h"
         )
-        QMessageBox.information(self, "Validación correcta", "Los datos son válidos.\n" + "Se procederá a calcular rutas internamente.")
         self.selected_info.setText(resumen)
+        self.results_view.setPlainText(self._format_planning_result(resultado))
+
+    def _format_planning_result(self, resultado):
+        sections = [
+            self._format_route_section(
+                "Alternativa A: mayor cantidad de destinos por presupuesto",
+                resultado["basic"]["max_destinations_by_budget"],
+            ),
+            self._format_route_section(
+                "Alternativa B: mayor cantidad de destinos en menor tiempo",
+                resultado["basic"]["max_destinations_by_time"],
+            ),
+            "Rutas por criterio de optimizacion",
+        ]
+
+        criterion_names = {
+            CRITERION_DISTANCE: "Distancia",
+            CRITERION_TIME: "Tiempo",
+            CRITERION_COST: "Costo USD",
+        }
+        for criterion, route in resultado["optimized"].items():
+            sections.append(
+                self._format_route_section(
+                    f"Criterio: {criterion_names.get(criterion, criterion)}",
+                    route,
+                )
+            )
+
+        return "\n\n".join(sections)
+
+    def _format_route_section(self, title, route):
+        if not route or not route["legs"]:
+            return f"{title}\nNo se encontro una ruta valida con las restricciones actuales."
+
+        stops = route["path"][1:-1]
+        lines = [
+            title,
+            f"Secuencia: {' -> '.join(route['path'])}",
+            f"Escalas intermedias: {', '.join(stops) if stops else 'Sin escalas'}",
+            f"Transportes usados: {', '.join(route['transports_used'])}",
+            f"Total: {route['total_distance']:.2f} km | ${route['total_cost']:.2f} | {route['total_time']:.2f} h",
+            "Tramos:",
+        ]
+        lines.extend(route["formatted_legs"])
+        return "\n".join(lines)
