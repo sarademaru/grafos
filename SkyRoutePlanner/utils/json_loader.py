@@ -2,6 +2,8 @@ import json
 from pathlib import Path
 
 from models.grafo import Grafo
+from models.actividad import Actividad
+from models.trabajo import Trabajo
 
 
 def _get_value(dct, keys, default=None):
@@ -58,6 +60,102 @@ def _parse_configuracion(datos):
     }
 
 
+def _crear_actividades(actividades_data):
+    """Convert activity dictionaries from JSON to Actividad objects."""
+    if not isinstance(actividades_data, list):
+        return []
+
+    actividades = []
+    for actividad_data in actividades_data:
+        if not isinstance(actividad_data, dict):
+            continue
+
+        try:
+            nombre = _get_value(
+                actividad_data,
+                ["nombre", "name", "title"],
+                None
+            )
+            if not nombre:
+                continue
+
+            # Duration: support multiple field names
+            duracion_horas = _get_value(
+                actividad_data,
+                ["duracion_horas", "duracionHoras", "duracionMin", "duration_hours", "duration"],
+                0
+            )
+            # Convert minutes to hours if needed
+            if "duracionMin" in actividad_data or "duracion_min" in actividad_data:
+                duracion_horas = actividad_data.get("duracionMin") or actividad_data.get("duracion_min", 0)
+                duracion_horas = duracion_horas / 60.0  # Convert minutes to hours
+
+            # Cost: support multiple field names
+            costo_usd = _get_value(
+                actividad_data,
+                ["costo_usd", "costoUSD", "costo", "cost", "price"],
+                0
+            )
+
+            actividad = Actividad(
+                nombre=nombre,
+                duracion_horas=duracion_horas,
+                costo_usd=costo_usd
+            )
+            actividades.append(actividad)
+        except (ValueError, TypeError) as e:
+            # Skip invalid activities with warning message in logs
+            continue
+
+    return actividades
+
+
+def _crear_trabajos(trabajos_data):
+    """Convert job dictionaries from JSON to Trabajo objects."""
+    if not isinstance(trabajos_data, list):
+        return []
+
+    trabajos = []
+    for trabajo_data in trabajos_data:
+        if not isinstance(trabajo_data, dict):
+            continue
+
+        try:
+            nombre = _get_value(
+                trabajo_data,
+                ["nombre", "name", "title"],
+                None
+            )
+            if not nombre:
+                continue
+
+            # Hourly rate: support multiple field names
+            tarifa_hora = _get_value(
+                trabajo_data,
+                ["tarifa_hora", "tarifaHora", "hourly_rate", "salary"],
+                0
+            )
+
+            # Max hours: support multiple field names
+            max_horas = _get_value(
+                trabajo_data,
+                ["max_horas", "maxHoras", "maximum_hours", "max_hours"],
+                8
+            )
+
+            trabajo = Trabajo(
+                nombre=nombre,
+                tarifa_hora=tarifa_hora,
+                max_horas=max_horas
+            )
+            trabajos.append(trabajo)
+        except (ValueError, TypeError) as e:
+            # Skip invalid jobs with warning message in logs
+            continue
+
+    return trabajos
+
+
 def cargar_json(ruta_archivo):
     """Load a graph from a JSON file.
 
@@ -93,8 +191,13 @@ def cargar_json(ruta_archivo):
         es_hub = _get_value(a, ["isHub", "esHub"], False)
         costo_alojamiento = _get_value(a, ["costoAlojamiento"], 0)
         costo_alimentacion = _get_value(a, ["costoAlimentacion"], 0)
-        actividades = _get_value(a, ["actividades"], [])
-        trabajos = _get_value(a, ["trabajos"], [])
+        
+        # Convert activity and job dictionaries to domain objects
+        actividades_data = _get_value(a, ["actividades"], [])
+        actividades = _crear_actividades(actividades_data)
+        
+        trabajos_data = _get_value(a, ["trabajos"], [])
+        trabajos = _crear_trabajos(trabajos_data)
 
         grafo.agregar_vertice(
             identificador=identificador,
