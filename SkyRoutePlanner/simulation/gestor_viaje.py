@@ -12,8 +12,8 @@ class GestorViaje:
     Attributes:
         grafo: Grafo en el que se opera.
         viajero: Viajero que realiza el viaje.
-        ruta_actual: Lista de códigos de aeropuertos en la ruta planificada.
-        indice_actual: Índice del aeropuerto actual en `ruta_actual` o None.
+        ruta_actual: Lista de codigos de aeropuertos en la ruta planificada.
+        indice_actual: Indice del aeropuerto actual en `ruta_actual` o None.
     """
 
     def __init__(self, grafo: Grafo, viajero: Viajero) -> None:
@@ -22,36 +22,44 @@ class GestorViaje:
         self.ruta_actual: List[str] = []
         self.indice_actual: Optional[int] = None
 
-    def iniciar_viaje(self, ruta: List[str]) -> None:
-        """Inicia el viaje con una ruta (lista de códigos de aeropuerto).
+        # Estado adicional para viaje dinamico paso a paso.
+        self.tiempo_transcurrido_horas: float = 0.0
+        self.horas_desde_ultima_alimentacion: float = 0.0
+        self.horas_desde_ultimo_hospedaje: float = 0.0
+        self.ultimo_aeropuerto_visitado: Optional[str] = None
+        self.decisiones: List[Dict[str, Any]] = []
 
-        Registra la llegada al primer aeropuerto automáticamente.
+    def iniciar_viaje(self, ruta: List[str]) -> None:
+        """Inicia el viaje con una ruta (lista de codigos de aeropuerto).
+
+        Registra la llegada al primer aeropuerto automaticamente.
         """
         if not ruta:
-            raise ValueError("La ruta no puede estar vacía")
+            raise ValueError("La ruta no puede estar vacia")
         self.ruta_actual = [c.upper().strip() for c in ruta]
         self.indice_actual = 0
         codigo = self.ruta_actual[0]
         self.registrar_llegada(codigo)
 
     def registrar_llegada(self, codigo_aeropuerto: str) -> None:
-        """Registrar llegada del viajero a un aeropuerto dado por código.
+        """Registrar llegada del viajero a un aeropuerto dado por codigo.
 
         Actualiza el estado interno y notifica al `Viajero`.
         """
         if not codigo_aeropuerto:
-            raise ValueError("Código de aeropuerto inválido")
+            raise ValueError("Codigo de aeropuerto invalido")
         codigo = codigo_aeropuerto.upper().strip()
-        # Actualizar índice si forma parte de la ruta
+        # Actualizar indice si forma parte de la ruta
         if self.ruta_actual and codigo in self.ruta_actual:
             self.indice_actual = self.ruta_actual.index(codigo)
         else:
-            # si no está en la ruta, añadimos al final y posicionamos allí
+            # si no esta en la ruta, anadimos al final y posicionamos alli
             self.ruta_actual.append(codigo)
             self.indice_actual = len(self.ruta_actual) - 1
 
         # Notificar al viajero
         self.viajero.registrar_aeropuerto(codigo)
+        self.ultimo_aeropuerto_visitado = codigo
 
     def _actividad_a_dict(self, actividad: Actividad) -> Dict[str, Any]:
         return {
@@ -78,7 +86,7 @@ class GestorViaje:
         else:
             raise ValueError("Actividad debe ser Actividad o dict compatible")
 
-        # Delegar la ejecución al viajero (podrá lanzar ValueError si insuficientes recursos)
+        # Delegar la ejecucion al viajero (podra lanzar ValueError si insuficientes recursos)
         self.viajero.registrar_actividad(actividad_dict)
 
     def realizar_trabajo(self, trabajo: Any, horas: float) -> None:
@@ -93,13 +101,13 @@ class GestorViaje:
         else:
             raise ValueError("Trabajo debe ser Trabajo o dict compatible")
 
-        # Delegar la ejecución al viajero
+        # Delegar la ejecucion al viajero
         self.viajero.registrar_trabajo(trabajo_dict, horas)
 
     def obtener_estado(self) -> Dict[str, Any]:
         """Devuelve el estado actual del gestor y del viajero.
 
-        Incluye resumen del `Viajero`, código del aeropuerto actual y la ruta.
+        Incluye resumen del `Viajero`, codigo del aeropuerto actual y la ruta.
         """
         estado_viajero = self.viajero.obtener_resumen()
         aeropuerto_actual = None
@@ -111,4 +119,221 @@ class GestorViaje:
             "aeropuerto_actual": aeropuerto_actual,
             "ruta_actual": list(self.ruta_actual),
             "indice_actual": self.indice_actual,
+            "tiempo_transcurrido_horas": self.tiempo_transcurrido_horas,
+            "horas_desde_ultima_alimentacion": self.horas_desde_ultima_alimentacion,
+            "horas_desde_ultimo_hospedaje": self.horas_desde_ultimo_hospedaje,
+            "decisiones": list(self.decisiones),
         }
+
+    # ------------------------------------------------------------------
+    # Funcionalidad adicional para el viaje dinamico paso a paso.
+    # No reemplaza los metodos existentes; los complementa.
+    # ------------------------------------------------------------------
+
+    def iniciar_viaje_dinamico(self, aeropuerto_origen: str) -> None:
+        """Inicia una simulacion dinamica desde un aeropuerto de origen."""
+        if not self.grafo.existe_vertice(aeropuerto_origen):
+            raise ValueError(f"El aeropuerto {aeropuerto_origen} no existe")
+
+        self.ruta_actual = []
+        self.indice_actual = None
+        self.tiempo_transcurrido_horas = 0.0
+        self.horas_desde_ultima_alimentacion = 0.0
+        self.horas_desde_ultimo_hospedaje = 0.0
+        self.ultimo_aeropuerto_visitado = None
+        self.decisiones = []
+        self.registrar_llegada(aeropuerto_origen)
+        self._registrar_decision("inicio", f"Viaje dinamico iniciado en {aeropuerto_origen}")
+
+    def obtener_alternativas_disponibles(self, transportes_preferidos: Optional[List[str]] = None) -> List[Dict[str, Any]]:
+        """Devuelve los vuelos posibles desde el aeropuerto actual."""
+        aeropuerto_actual = self._obtener_codigo_actual()
+        vertice = self.grafo.obtener_vertice(aeropuerto_actual)
+        if vertice is None:
+            return []
+
+        alternativas = []
+        for arista in vertice.adyacencias:
+            for transporte in self._transportes_para_arista(arista, transportes_preferidos):
+                costo = self._calcular_costo_tramo(arista, transporte)
+                tiempo = self._calcular_tiempo_tramo(arista, transporte)
+                alternativas.append(
+                    {
+                        "origen": aeropuerto_actual,
+                        "destino": arista.vertice_destino.identificador,
+                        "transporte": transporte,
+                        "distancia_km": arista.distancia_km,
+                        "costo_vuelo": costo,
+                        "tiempo_vuelo_horas": tiempo,
+                        "puede_pagarse": costo <= self.viajero.presupuesto_actual,
+                    }
+                )
+
+        alternativas.sort(key=lambda item: (item["costo_vuelo"], item["tiempo_vuelo_horas"]))
+        return alternativas
+
+    def sugerir_siguiente_alternativa(self, transportes_preferidos: Optional[List[str]] = None) -> Optional[Dict[str, Any]]:
+        """Sugiere el siguiente movimiento mas barato hacia un destino no visitado."""
+        visitados = set(self.viajero.aeropuertos_visitados)
+        alternativas = self.obtener_alternativas_disponibles(transportes_preferidos)
+        no_visitadas = [
+            alternativa
+            for alternativa in alternativas
+            if alternativa["destino"] not in visitados and alternativa["puede_pagarse"]
+        ]
+        if no_visitadas:
+            return no_visitadas[0]
+
+        pagables = [alternativa for alternativa in alternativas if alternativa["puede_pagarse"]]
+        return pagables[0] if pagables else None
+
+    def avanzar_a_destino(self, destino: str, transporte: Optional[str] = None) -> Dict[str, Any]:
+        """Ejecuta un paso de viaje hacia un destino adyacente.
+
+        Durante el vuelo aplica alimentacion obligatoria cada 8 horas usando
+        el costo del ultimo aeropuerto visitado. Al llegar aplica hospedaje
+        obligatorio si han pasado 20 horas desde el ultimo hospedaje.
+        """
+        aeropuerto_actual = self._obtener_codigo_actual()
+        arista = self._buscar_arista(aeropuerto_actual, destino)
+        if arista is None:
+            raise ValueError(f"No existe ruta directa de {aeropuerto_actual} a {destino}")
+
+        transporte_elegido = transporte or self._elegir_transporte_mas_barato(arista)
+        if transporte_elegido not in self._transportes_para_arista(arista, None):
+            raise ValueError(f"El transporte {transporte_elegido} no esta disponible para esta ruta")
+
+        costo_vuelo = self._calcular_costo_tramo(arista, transporte_elegido)
+        tiempo_vuelo = self._calcular_tiempo_tramo(arista, transporte_elegido)
+
+        self.viajero.gastar(costo_vuelo)
+        self._consumir_tiempo_con_obligatorias(tiempo_vuelo)
+        self.registrar_llegada(arista.vertice_destino.identificador)
+        eventos_llegada = self._aplicar_obligatorias_en_destino()
+
+        decision = {
+            "tipo": "vuelo",
+            "origen": aeropuerto_actual,
+            "destino": arista.vertice_destino.identificador,
+            "transporte": transporte_elegido,
+            "costo_vuelo": costo_vuelo,
+            "tiempo_vuelo_horas": tiempo_vuelo,
+            "eventos_obligatorios": eventos_llegada,
+            "presupuesto_restante": self.viajero.presupuesto_actual,
+            "tiempo_restante_horas": self.viajero.tiempo_restante_horas,
+        }
+        self.decisiones.append(decision)
+        return decision
+
+    def obtener_actividades_y_trabajos_actuales(self) -> Dict[str, Any]:
+        """Lista actividades opcionales y trabajos en el aeropuerto actual."""
+        vertice = self.grafo.obtener_vertice(self._obtener_codigo_actual())
+        if vertice is None:
+            return {"actividades": [], "trabajos": []}
+        return {
+            "actividades": list(vertice.actividades),
+            "trabajos": list(vertice.trabajos),
+        }
+
+    def _obtener_codigo_actual(self) -> str:
+        if self.indice_actual is None or not self.ruta_actual:
+            raise ValueError("El viaje no ha sido iniciado")
+        return self.ruta_actual[self.indice_actual]
+
+    def _buscar_arista(self, origen: str, destino: str):
+        vertice = self.grafo.obtener_vertice(origen)
+        if vertice is None:
+            return None
+        destino_normalizado = destino.upper().strip()
+        for arista in vertice.adyacencias:
+            if arista.vertice_destino.identificador == destino_normalizado:
+                return arista
+        return None
+
+    def _transportes_para_arista(self, arista, transportes_preferidos: Optional[List[str]]) -> List[str]:
+        transportes = arista.aeronaves or self.grafo.obtener_aeronaves_disponibles()
+        if not transportes:
+            return ["Transporte"]
+        if not transportes_preferidos:
+            return list(transportes)
+
+        preferidos = {transporte.strip().lower() for transporte in transportes_preferidos}
+        return [transporte for transporte in transportes if transporte.strip().lower() in preferidos]
+
+    def _elegir_transporte_mas_barato(self, arista) -> str:
+        transportes = self._transportes_para_arista(arista, None)
+        return min(transportes, key=lambda transporte: self._calcular_costo_tramo(arista, transporte))
+
+    def _calcular_costo_tramo(self, arista, transporte: str) -> float:
+        distancia = float(arista.distancia_km or 0)
+        costo_km = float(self.grafo.obtener_costo_por_km(transporte) or 0)
+        return float(arista.costo_base or 0) + distancia * costo_km
+
+    def _calcular_tiempo_tramo(self, arista, transporte: str) -> float:
+        distancia = float(arista.distancia_km or 0)
+        tiempo_km = float(self.grafo.obtener_tiempo_por_km(transporte) or 0)
+        return distancia * tiempo_km
+
+    def _consumir_tiempo_con_obligatorias(self, horas: float) -> None:
+        horas_restantes = horas
+        while horas_restantes > 0:
+            faltante_alimentacion = 8 - self.horas_desde_ultima_alimentacion
+            if faltante_alimentacion <= horas_restantes:
+                self._avanzar_reloj(faltante_alimentacion)
+                horas_restantes -= faltante_alimentacion
+                self._aplicar_alimentacion(self.ultimo_aeropuerto_visitado)
+            else:
+                self._avanzar_reloj(horas_restantes)
+                horas_restantes = 0
+
+    def _avanzar_reloj(self, horas: float) -> None:
+        self.viajero.consumir_tiempo(horas)
+        self.tiempo_transcurrido_horas += horas
+        self.horas_desde_ultima_alimentacion += horas
+        self.horas_desde_ultimo_hospedaje += horas
+
+    def _aplicar_alimentacion(self, codigo_aeropuerto: Optional[str]) -> Dict[str, Any]:
+        if not codigo_aeropuerto:
+            raise ValueError("No hay aeropuerto previo para cobrar alimentacion")
+        vertice = self.grafo.obtener_vertice(codigo_aeropuerto)
+        costo = float(getattr(vertice, "costo_alimentacion", 0) or 0)
+        self.viajero.gastar(costo)
+        self.horas_desde_ultima_alimentacion = 0.0
+        evento = {
+            "tipo": "alimentacion",
+            "aeropuerto": codigo_aeropuerto,
+            "costo": costo,
+            "tiempo": self.tiempo_transcurrido_horas,
+        }
+        self.decisiones.append(evento)
+        return evento
+
+    def _aplicar_obligatorias_en_destino(self) -> List[Dict[str, Any]]:
+        eventos = []
+        if self.horas_desde_ultimo_hospedaje >= 20:
+            eventos.append(self._aplicar_hospedaje(self._obtener_codigo_actual()))
+        return eventos
+
+    def _aplicar_hospedaje(self, codigo_aeropuerto: str) -> Dict[str, Any]:
+        vertice = self.grafo.obtener_vertice(codigo_aeropuerto)
+        costo = float(getattr(vertice, "costo_alojamiento", 0) or 0)
+        self.viajero.gastar(costo)
+        self.horas_desde_ultimo_hospedaje = 0.0
+        evento = {
+            "tipo": "hospedaje",
+            "aeropuerto": codigo_aeropuerto,
+            "costo": costo,
+            "tiempo": self.tiempo_transcurrido_horas,
+        }
+        self.decisiones.append(evento)
+        return evento
+
+    def _registrar_decision(self, tipo: str, descripcion: str) -> None:
+        self.decisiones.append(
+            {
+                "tipo": tipo,
+                "descripcion": descripcion,
+                "tiempo": self.tiempo_transcurrido_horas,
+                "presupuesto": self.viajero.presupuesto_actual,
+            }
+        )

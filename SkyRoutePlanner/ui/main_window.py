@@ -326,6 +326,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self.last_route_payload = None
         self.inicio_page.set_graph(grafo)
         self.planificador_page.set_graph(grafo)
+        self.viaje_dinamico_page.set_graph(grafo)
         self.reportes_page.clear_report()
         self.sidebar.select_index(1)
         self.page_stack.setCurrentIndex(1)
@@ -337,6 +338,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self.last_route_payload = None
         self.inicio_page.clear_graph()
         self.planificador_page.clear_graph()
+        self.viaje_dinamico_page.clear_graph()
         self.reportes_page.clear_report()
         self.status_label.setText("Status: System reset")
         self.log_view.append("System reset requested.")
