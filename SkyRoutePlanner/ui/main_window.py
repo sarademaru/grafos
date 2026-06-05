@@ -86,10 +86,10 @@ class MainWindow(QtWidgets.QMainWindow):
     def _build_footer(self):
         footer = QtWidgets.QFrame()
         footer.setObjectName("footer")
-        footer.setMaximumHeight(96)
+        footer.setMaximumHeight(58)
         footer_layout = QtWidgets.QVBoxLayout(footer)
-        footer_layout.setContentsMargins(24, 6, 24, 8)
-        footer_layout.setSpacing(4)
+        footer_layout.setContentsMargins(24, 4, 24, 4)
+        footer_layout.setSpacing(2)
 
         log_title = QtWidgets.QLabel("System Log")
         log_title.setObjectName("logTitle")
@@ -97,8 +97,8 @@ class MainWindow(QtWidgets.QMainWindow):
         self.log_view = QtWidgets.QTextEdit()
         self.log_view.setReadOnly(True)
         self.log_view.setObjectName("logView")
-        self.log_view.setMinimumHeight(42)
-        self.log_view.setMaximumHeight(54)
+        self.log_view.setMinimumHeight(24)
+        self.log_view.setMaximumHeight(30)
         self.log_view.setPlainText("Application initialized. Navigation is ready.")
 
         footer_layout.addWidget(log_title)
@@ -131,13 +131,35 @@ class MainWindow(QtWidgets.QMainWindow):
                 font-weight: 700;
                 color: #ffffff;
             }
+            QPushButton#sidebarToggle {
+                min-height: 40px;
+                border: none;
+                color: #f8fafc;
+                background: transparent;
+                text-align: left;
+                padding: 8px 14px;
+                font-size: 22px;
+            }
+            QPushButton#sidebarToggle:hover {
+                background: #6d28d9;
+            }
+            QPushButton#sidebarToggle[collapsed="true"] {
+                text-align: center;
+                padding: 8px 0;
+            }
             QPushButton#sidebarButton {
+                min-height: 44px;
                 padding: 12px 16px;
                 border: none;
                 color: #cbd5e1;
                 background: transparent;
                 text-align: left;
                 font-size: 14px;
+            }
+            QPushButton#sidebarButton[collapsed="true"] {
+                text-align: center;
+                padding: 12px 0;
+                font-size: 18px;
             }
             QPushButton#sidebarButton:hover {
                 background: #6d28d9;
@@ -153,7 +175,7 @@ class MainWindow(QtWidgets.QMainWindow):
             }
             QLabel#logTitle {
                 color: #e2e8f0;
-                font-size: 13px;
+                font-size: 11px;
                 font-weight: 600;
             }
             QTextEdit#logView {
@@ -161,8 +183,8 @@ class MainWindow(QtWidgets.QMainWindow):
                 color: #e2e8f0;
                 border: 1px solid #334155;
                 font-family: Consolas, monospace;
-                font-size: 11px;
-                min-height: 42px;
+                font-size: 10px;
+                min-height: 24px;
             }
             QTextEdit#routeResults {
                 background: #0f172a;
