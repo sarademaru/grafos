@@ -15,6 +15,7 @@ class MainWindow(QtWidgets.QMainWindow):
     def __init__(self):
         super().__init__()
         self.grafo = None
+        self.last_route_payload = None
         self.setWindowTitle("SkyRoute Planner")
         self.resize(1200, 850)
         self._setup_ui()
@@ -66,16 +67,20 @@ class MainWindow(QtWidgets.QMainWindow):
         self.sidebar = Sidebar()
         self.sidebar.menu_selected.connect(self.on_menu_selected)
 
+        self.inicio_page = PaginaInicio()
         self.planificador_page = PaginaPlanificador()
+        self.viaje_dinamico_page = PaginaViajeDinamico()
+        self.reportes_page = PaginaReportes()
         self.config_page = PaginaConfiguracion()
+        self.planificador_page.route_calculated.connect(self.on_route_calculated)
         self.config_page.graph_loaded.connect(self.on_graph_loaded)
         self.config_page.system_reset.connect(self.on_system_reset)
 
         self.page_stack = QtWidgets.QStackedWidget()
-        self.page_stack.addWidget(PaginaInicio())
+        self.page_stack.addWidget(self.inicio_page)
         self.page_stack.addWidget(self.planificador_page)
-        self.page_stack.addWidget(PaginaViajeDinamico())
-        self.page_stack.addWidget(PaginaReportes())
+        self.page_stack.addWidget(self.viaje_dinamico_page)
+        self.page_stack.addWidget(self.reportes_page)
         self.page_stack.addWidget(self.config_page)
 
         body_layout.addWidget(self.sidebar)
@@ -205,6 +210,31 @@ class MainWindow(QtWidgets.QMainWindow):
                 border: 1px solid #4c1d95;
                 border-radius: 12px;
             }
+            QFrame#dashboardCard,
+            QFrame#summaryPanel,
+            QFrame#reportCard,
+            QFrame#placeholderPanel,
+            QFrame#placeholderCard {
+                background: #111827;
+                border: 1px solid #334155;
+                border-radius: 8px;
+            }
+            QLabel#dashboardCardLabel,
+            QLabel#reportLine {
+                color: #cbd5e1;
+                font-size: 13px;
+            }
+            QLabel#dashboardCardValue {
+                color: #f8fafc;
+                font-size: 22px;
+                font-weight: 700;
+            }
+            QLabel#reportCardTitle,
+            QLabel#placeholderTitle {
+                color: #f8fafc;
+                font-size: 18px;
+                font-weight: 700;
+            }
             QLabel#infoLabel {
                 color: #cbd5e1;
                 font-size: 14px;
@@ -249,8 +279,13 @@ class MainWindow(QtWidgets.QMainWindow):
                 background: transparent;
                 border: none;
             }
-            QScrollArea#plannerScroll > QWidget > QWidget {
+            QScrollArea#plannerScroll > QWidget > QWidget,
+            QScrollArea#reportsScroll > QWidget > QWidget {
                 background: transparent;
+            }
+            QScrollArea#reportsScroll {
+                background: transparent;
+                border: none;
             }
             QScrollBar:vertical {
                 background: #1f2937;
@@ -288,7 +323,10 @@ class MainWindow(QtWidgets.QMainWindow):
 
     def on_graph_loaded(self, grafo):
         self.grafo = grafo
+        self.last_route_payload = None
+        self.inicio_page.set_graph(grafo)
         self.planificador_page.set_graph(grafo)
+        self.reportes_page.clear_report()
         self.sidebar.select_index(1)
         self.page_stack.setCurrentIndex(1)
         self.status_label.setText("Status: Graph loaded")
@@ -296,6 +334,15 @@ class MainWindow(QtWidgets.QMainWindow):
 
     def on_system_reset(self):
         self.grafo = None
+        self.last_route_payload = None
+        self.inicio_page.clear_graph()
         self.planificador_page.clear_graph()
+        self.reportes_page.clear_report()
         self.status_label.setText("Status: System reset")
         self.log_view.append("System reset requested.")
+
+    def on_route_calculated(self, payload):
+        self.last_route_payload = payload
+        self.inicio_page.set_last_route(payload)
+        self.reportes_page.set_report(payload)
+        self.log_view.append("Route calculated. Detailed report updated.")

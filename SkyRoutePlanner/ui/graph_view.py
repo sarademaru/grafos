@@ -80,7 +80,9 @@ class NodoGrafico(QGraphicsEllipseItem):
 class AristaGrafica:
     """Graphical edge with directed arrow and distance label."""
 
-    def __init__(self, source_item, target_item, distancia_km):
+    def __init__(self, origin_id, destination_id, source_item, target_item, distancia_km):
+        self.origin_id = origin_id
+        self.destination_id = destination_id
         self.source_item = source_item
         self.target_item = target_item
         self.distancia_km = distancia_km
@@ -125,6 +127,20 @@ class AristaGrafica:
         self.label_item.setZValue(0)
         scene.addItem(self.label_item)
 
+    def set_highlighted(self, highlighted):
+        if not self.line_item:
+            return
+
+        color = QColor("#facc15") if highlighted else QColor("#e5e7eb")
+        width = 4 if highlighted else 2
+        self.line_item.setPen(QPen(color, width))
+
+        if self.arrow_item:
+            self.arrow_item.setBrush(QBrush(color))
+
+        if self.label_item:
+            self.label_item.setDefaultTextColor(color if highlighted else QColor("#f8fafc"))
+
     def _build_arrow(self, tip, tail):
         direction = tail - tip
         length = sqrt(direction.x() ** 2 + direction.y() ** 2)
@@ -159,6 +175,7 @@ class GraphView(QGraphicsView):
 
         self.grafo = None
         self.node_items = {}
+        self.edge_items = []
 
     def set_graph(self, grafo):
         self.grafo = grafo
@@ -167,10 +184,13 @@ class GraphView(QGraphicsView):
     def clear_graph(self):
         self.grafo = None
         self.scene.clear()
+        self.node_items.clear()
+        self.edge_items.clear()
 
     def dibujar_grafo(self, grafo):
         self.scene.clear()
         self.node_items.clear()
+        self.edge_items.clear()
 
         if not grafo:
             return
@@ -189,8 +209,15 @@ class GraphView(QGraphicsView):
                 target_node = self.node_items.get(arista.vertice_destino.identificador)
                 if not target_node:
                     continue
-                edge = AristaGrafica(source_node, target_node, arista.distancia_km)
+                edge = AristaGrafica(
+                    vertice.identificador,
+                    arista.vertice_destino.identificador,
+                    source_node,
+                    target_node,
+                    arista.distancia_km,
+                )
                 edge.add_to_scene(self.scene)
+                self.edge_items.append(edge)
 
         self.scene.setBackgroundBrush(QColor("#0f172a"))
         self.scene.setSceneRect(self.scene.itemsBoundingRect().adjusted(-80, -80, 80, 80))
@@ -257,3 +284,11 @@ class GraphView(QGraphicsView):
         super().resizeEvent(event)
         if self.grafo:
             self._zoom_to_fit()
+
+    def highlight_route(self, path):
+        route_edges = set()
+        if path and len(path) > 1:
+            route_edges = set(zip(path, path[1:]))
+
+        for edge in self.edge_items:
+            edge.set_highlighted((edge.origin_id, edge.destination_id) in route_edges)

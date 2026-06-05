@@ -29,6 +29,8 @@ from ui.graph_view import GraphView
 class PaginaPlanificador(QtWidgets.QWidget):
     """Pagina para visualizar el grafo y planificar rutas."""
 
+    route_calculated = QtCore.pyqtSignal(dict)
+
     def __init__(self, parent=None):
         super().__init__(parent)
         self.grafo = None
@@ -129,11 +131,36 @@ class PaginaPlanificador(QtWidgets.QWidget):
         self.selected_info.setWordWrap(True)
         self.selected_info.setObjectName("infoLabel")
 
-        self.results_view = QtWidgets.QTextEdit()
-        self.results_view.setReadOnly(True)
-        self.results_view.setObjectName("routeResults")
-        self.results_view.setMinimumHeight(150)
-        self.results_view.setPlainText("Los resultados del itinerario apareceran aqui.")
+        self.summary_panel = QFrame()
+        self.summary_panel.setObjectName("summaryPanel")
+        summary_layout = QVBoxLayout(self.summary_panel)
+        summary_layout.setContentsMargins(12, 12, 12, 12)
+        summary_layout.setSpacing(8)
+
+        summary_title = QLabel("Resumen ejecutivo")
+        summary_title.setObjectName("sectionTitle")
+        self.summary_route = QLabel("Ruta encontrada: -")
+        self.summary_distance = QLabel("Distancia total: -")
+        self.summary_time = QLabel("Tiempo total: -")
+        self.summary_cost = QLabel("Costo total: -")
+        self.summary_stops = QLabel("Numero de escalas: -")
+
+        for widget in (
+            self.summary_route,
+            self.summary_distance,
+            self.summary_time,
+            self.summary_cost,
+            self.summary_stops,
+        ):
+            widget.setObjectName("infoLabel")
+            widget.setWordWrap(True)
+
+        summary_layout.addWidget(summary_title)
+        summary_layout.addWidget(self.summary_route)
+        summary_layout.addWidget(self.summary_distance)
+        summary_layout.addWidget(self.summary_time)
+        summary_layout.addWidget(self.summary_cost)
+        summary_layout.addWidget(self.summary_stops)
 
         legend_label = QLabel("Leyenda")
         legend_label.setObjectName("sectionTitle")
@@ -172,7 +199,7 @@ class PaginaPlanificador(QtWidgets.QWidget):
         control_layout.addLayout(form_layout)
         control_layout.addWidget(self.calculate_button)
         control_layout.addWidget(self.selected_info)
-        control_layout.addWidget(self.results_view)
+        control_layout.addWidget(self.summary_panel)
         control_layout.addWidget(legend_label)
         control_layout.addWidget(legend)
         control_layout.addWidget(info_box)
@@ -202,7 +229,7 @@ class PaginaPlanificador(QtWidgets.QWidget):
         self.graph_view.clear_graph()
         self.origin_combo.clear()
         self.dest_combo.clear()
-        self.results_view.setPlainText("Los resultados del itinerario apareceran aqui.")
+        self._clear_summary()
         self._clear_selected_info()
 
     def _refresh_airports(self):
@@ -290,6 +317,13 @@ class PaginaPlanificador(QtWidgets.QWidget):
             include_secondary=self.sec_include.isChecked(),
         )
 
+        primary_route = self._choose_primary_route(resultado, criterios_sel)
+        self._show_executive_summary(primary_route)
+        if primary_route:
+            self.graph_view.highlight_route(primary_route["path"])
+        else:
+            self.graph_view.highlight_route([])
+
         sec_text = "Incluir" if self.sec_include.isChecked() else "Excluir"
         resumen = (
             f"Origen: {origen} -> Destino: {destino}\n"
@@ -299,48 +333,54 @@ class PaginaPlanificador(QtWidgets.QWidget):
             f"Presupuesto: ${presupuesto:.2f}, Tiempo: {tiempo} h"
         )
         self.selected_info.setText(resumen)
-        self.results_view.setPlainText(self._format_planning_result(resultado))
+        self.route_calculated.emit(
+            {
+                "result": resultado,
+                "primary_route": primary_route,
+                "context": {
+                    "origin": origen,
+                    "destination": destino,
+                    "budget": presupuesto,
+                    "available_time": tiempo,
+                    "criteria": criterios_sel,
+                    "criteria_labels": criterios_texto,
+                    "selected_transports": transportes_sel,
+                    "include_secondary": self.sec_include.isChecked(),
+                },
+            }
+        )
 
-    def _format_planning_result(self, resultado):
-        sections = [
-            self._format_route_section(
-                "Alternativa A: mayor cantidad de destinos por presupuesto",
-                resultado["basic"]["max_destinations_by_budget"],
-            ),
-            self._format_route_section(
-                "Alternativa B: mayor cantidad de destinos en menor tiempo",
-                resultado["basic"]["max_destinations_by_time"],
-            ),
-            "Rutas por criterio de optimizacion",
-        ]
+    def _choose_primary_route(self, resultado, criterios_sel):
+        for criterion in criterios_sel:
+            route = resultado["optimized"].get(criterion)
+            if route and route.get("legs"):
+                return route
 
-        criterion_names = {
-            CRITERION_DISTANCE: "Distancia",
-            CRITERION_TIME: "Tiempo",
-            CRITERION_COST: "Costo USD",
-        }
-        for criterion, route in resultado["optimized"].items():
-            sections.append(
-                self._format_route_section(
-                    f"Criterio: {criterion_names.get(criterion, criterion)}",
-                    route,
-                )
-            )
+        for route in resultado["basic"].values():
+            if route and route.get("legs"):
+                return route
 
-        return "\n\n".join(sections)
+        return None
 
-    def _format_route_section(self, title, route):
-        if not route or not route["legs"]:
-            return f"{title}\nNo se encontro una ruta valida con las restricciones actuales."
+    def _show_executive_summary(self, route):
+        if not route:
+            self.summary_route.setText("Ruta encontrada: No disponible")
+            self.summary_distance.setText("Distancia total: -")
+            self.summary_time.setText("Tiempo total: -")
+            self.summary_cost.setText("Costo total: -")
+            self.summary_stops.setText("Numero de escalas: -")
+            return
 
-        stops = route["path"][1:-1]
-        lines = [
-            title,
-            f"Secuencia: {' -> '.join(route['path'])}",
-            f"Escalas intermedias: {', '.join(stops) if stops else 'Sin escalas'}",
-            f"Transportes usados: {', '.join(route['transports_used'])}",
-            f"Total: {route['total_distance']:.2f} km | ${route['total_cost']:.2f} | {route['total_time']:.2f} h",
-            "Tramos:",
-        ]
-        lines.extend(route["formatted_legs"])
-        return "\n".join(lines)
+        stops = max(0, len(route["path"]) - 2)
+        self.summary_route.setText(f"Ruta encontrada: {' -> '.join(route['path'])}")
+        self.summary_distance.setText(f"Distancia total: {route['total_distance']:.2f} km")
+        self.summary_time.setText(f"Tiempo total: {route['total_time']:.2f} h")
+        self.summary_cost.setText(f"Costo total: ${route['total_cost']:.2f}")
+        self.summary_stops.setText(f"Numero de escalas: {stops}")
+
+    def _clear_summary(self):
+        self.summary_route.setText("Ruta encontrada: -")
+        self.summary_distance.setText("Distancia total: -")
+        self.summary_time.setText("Tiempo total: -")
+        self.summary_cost.setText("Costo total: -")
+        self.summary_stops.setText("Numero de escalas: -")
