@@ -143,8 +143,8 @@ class PaginaViajeDinamico(QtWidgets.QWidget):
         scroll.setHorizontalScrollBarPolicy(QtCore.Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         scroll.setWidget(control_panel)
 
-        content_layout.addWidget(scroll)
-        content_layout.addWidget(self.graph_view, stretch=1)
+        content_layout.addWidget(scroll,3)
+        content_layout.addWidget(self.graph_view, 5)
         layout.addLayout(content_layout, stretch=1)
 
     def _build_status_value(self, text):
