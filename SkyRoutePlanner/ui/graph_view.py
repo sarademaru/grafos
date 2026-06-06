@@ -195,6 +195,7 @@ class GraphView(QGraphicsView):
         self.grafo = None
         self.node_items = {}
         self.edge_items = []
+        self.flight_marker = None
 
     def set_graph(self, grafo):
         self.grafo = grafo
@@ -205,6 +206,7 @@ class GraphView(QGraphicsView):
         self.scene.clear()
         self.node_items.clear()
         self.edge_items.clear()
+        self.flight_marker = None
 
     def dibujar_grafo(self, grafo):
         self.scene.clear()
@@ -309,6 +311,40 @@ class GraphView(QGraphicsView):
         for edge in self.edge_items:
             edge.refresh_style()
         self.viewport().update()
+
+    def set_flight_progress(self, origen, destino, progreso):
+        edge = self._find_edge(origen, destino)
+        if not edge or not edge.line_item:
+            self.clear_flight_progress()
+            return
+
+        if self.flight_marker is None:
+            self.flight_marker = QGraphicsEllipseItem(-9, -9, 18, 18)
+            self.flight_marker.setBrush(QBrush(QColor("#22c55e")))
+            self.flight_marker.setPen(QPen(QColor("#f8fafc"), 2))
+            self.flight_marker.setZValue(3)
+            self.scene.addItem(self.flight_marker)
+
+        progreso = max(0.0, min(1.0, float(progreso)))
+        line = edge.line_item.line()
+        start = line.p1()
+        end = line.p2()
+        x = start.x() + (end.x() - start.x()) * progreso
+        y = start.y() + (end.y() - start.y()) * progreso
+        self.flight_marker.setPos(QPointF(x, y))
+        self.flight_marker.setVisible(True)
+        self.viewport().update()
+
+    def clear_flight_progress(self):
+        if self.flight_marker:
+            self.flight_marker.setVisible(False)
+        self.viewport().update()
+
+    def _find_edge(self, origen, destino):
+        for edge in self.edge_items:
+            if edge.origin_id == origen and edge.destination_id == destino:
+                return edge
+        return None
 
     def highlight_route(self, path):
         route_edges = set()
