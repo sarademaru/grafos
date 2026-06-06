@@ -54,6 +54,40 @@ class ItineraryPlannerTest(unittest.TestCase):
         self.assertEqual(result["optimized"][CRITERION_TIME]["path"], ["A", "B", "D"])
         self.assertEqual(result["optimized"][CRITERION_COST]["path"], ["A", "B", "D"])
 
+    def test_basic_alternatives_prioritize_more_destinations_over_direct_route(self):
+        graph = Grafo()
+        graph.configuracion["aeronaves"] = {
+            "Avion Comercial": {"costoKm": 1, "tiempoKm": 1},
+            "Avion Regional": {"costoKm": 1, "tiempoKm": 1},
+            "Helice": {"costoKm": 1, "tiempoKm": 1},
+        }
+
+        for vertex, is_hub in (("A", True), ("B", True), ("C", False), ("D", True)):
+            graph.agregar_vertice(vertex, es_hub=is_hub)
+
+        graph.agregar_arista("A", "B", 10, aeronaves=["Avion Comercial"], costo_base=0)
+        graph.agregar_arista("B", "C", 10, aeronaves=["Helice"], costo_base=0)
+        graph.agregar_arista("C", "D", 10, aeronaves=["Avion Regional"], costo_base=0)
+        graph.agregar_arista("A", "D", 5, aeronaves=["Avion Comercial"], costo_base=0)
+
+        result = plan_itinerary(
+            grafo=graph,
+            origin_id="A",
+            destination_id="D",
+            budget=100,
+            available_time=100,
+            criteria=[CRITERION_COST],
+            selected_transports=["Avion Comercial", "Avion Regional", "Helice"],
+            include_secondary=True,
+        )
+
+        self.assertEqual(result["basic"]["max_destinations_by_budget"]["path"], ["A", "B", "C", "D"])
+        self.assertEqual(result["basic"]["max_destinations_by_time"]["path"], ["A", "B", "C", "D"])
+        self.assertEqual(
+            result["basic"]["max_destinations_by_budget"]["transports_used"],
+            ["Avion Comercial", "Avion Regional", "Helice"],
+        )
+
     def test_excluding_secondary_airports_removes_secondary_routes(self):
         result = plan_itinerary(
             grafo=self._build_graph(),
@@ -89,6 +123,52 @@ class ItineraryPlannerTest(unittest.TestCase):
             budget_route["transports_used"],
             ["Avion Comercial", "Avion Regional", "Helice"],
         )
+
+    def test_basic_alternatives_maximize_destinations_before_direct_route(self):
+        graph = Grafo()
+        graph.configuracion["aeronaves"] = {
+            "Comercial": {"costoKm": 0.30, "tiempoKm": 0.004},
+            "Regional": {"costoKm": 0.15, "tiempoKm": 0.010},
+            "Helice": {"costoKm": 0.04, "tiempoKm": 0.030},
+        }
+        for airport, is_hub in {
+            "BOG": True,
+            "MDE": True,
+            "UIO": False,
+            "LIM": True,
+            "SCL": True,
+            "MEX": True,
+        }.items():
+            graph.agregar_vertice(airport, es_hub=is_hub)
+
+        graph.agregar_arista("BOG", "MEX", 3160, aeronaves=["Comercial"])
+        graph.agregar_arista("BOG", "MDE", 250, aeronaves=["Helice"])
+        graph.agregar_arista("MDE", "UIO", 430, aeronaves=["Helice"])
+        graph.agregar_arista("UIO", "LIM", 1320, aeronaves=["Helice"])
+        graph.agregar_arista("LIM", "SCL", 2450, aeronaves=["Helice"])
+        graph.agregar_arista("SCL", "MEX", 1500, aeronaves=["Helice"])
+        graph.agregar_arista("BOG", "LIM", 1880, aeronaves=["Regional"])
+        graph.agregar_arista("LIM", "MEX", 4250, aeronaves=["Regional"])
+
+        result = plan_itinerary(
+            grafo=graph,
+            origin_id="BOG",
+            destination_id="MEX",
+            budget=50000,
+            available_time=500,
+            criteria=[CRITERION_COST],
+            selected_transports=["Avion Comercial", "Avion Regional", "Helice"],
+            include_secondary=True,
+        )
+
+        expected_path = ["BOG", "MDE", "UIO", "LIM", "SCL", "MEX"]
+        budget_route = result["basic"]["max_destinations_by_budget"]
+        time_route = result["basic"]["max_destinations_by_time"]
+
+        self.assertEqual(budget_route["path"], expected_path)
+        self.assertEqual(time_route["path"], expected_path)
+        self.assertLessEqual(budget_route["total_cost"], 50000)
+        self.assertLessEqual(time_route["total_time"], 500)
 
     def test_optimized_routes_respect_budget_and_time_limits(self):
         graph = Grafo()

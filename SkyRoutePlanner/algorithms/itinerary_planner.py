@@ -93,23 +93,18 @@ def _route_summary(path, legs):
     }
 
 
+def _visit_route_priority(route, tie_breaker=CRITERION_COST):
+    destinations = len(route["path"]) - 1
+    if tie_breaker == CRITERION_TIME:
+        return (destinations, -route["total_time"], -route["total_cost"])
+    return (destinations, -route["total_cost"], -route["total_time"])
+
+
 def _better_visit_route(candidate, current, tie_breaker=CRITERION_COST):
     if current is None:
         return True
 
-    candidate_destinations = len(candidate["path"]) - 1
-    current_destinations = len(current["path"]) - 1
-    if candidate_destinations != current_destinations:
-        return candidate_destinations > current_destinations
-
-    if tie_breaker == CRITERION_TIME:
-        if candidate["total_time"] != current["total_time"]:
-            return candidate["total_time"] < current["total_time"]
-        return candidate["total_cost"] < current["total_cost"]
-
-    if candidate["total_cost"] != current["total_cost"]:
-        return candidate["total_cost"] < current["total_cost"]
-    return candidate["total_time"] < current["total_time"]
+    return _visit_route_priority(candidate, tie_breaker) > _visit_route_priority(current, tie_breaker)
 
 
 def _transport_requirement_met(selected_transports, used_transports):
@@ -300,6 +295,7 @@ def plan_basic_itineraries(
             limit_type=CRITERION_COST,
             selected_transports=selected_transports,
             include_secondary=include_secondary,
+            require_all_selected_transports=False,
             destination_id=destination_id,
             max_time=available_time,
         ),
@@ -310,6 +306,7 @@ def plan_basic_itineraries(
             limit_type=CRITERION_TIME,
             selected_transports=selected_transports,
             include_secondary=include_secondary,
+            require_all_selected_transports=False,
             destination_id=destination_id,
             max_cost=budget,
         ),
