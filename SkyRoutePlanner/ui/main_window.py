@@ -392,4 +392,5 @@ class MainWindow(QtWidgets.QMainWindow):
         estado = gestor.obtener_estado()
         estado["actividades_realizadas"] = list(gestor.viajero.actividades_realizadas)
         estado["trabajos_realizados"] = list(gestor.viajero.trabajos_realizados)
+        estado["tiempo_libre_registrado"] = list(gestor.viajero.tiempo_libre_registrado)
         self.reportes_page.set_dynamic_report(estado, alternativas)

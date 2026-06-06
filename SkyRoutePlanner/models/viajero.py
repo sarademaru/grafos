@@ -50,6 +50,7 @@ class Viajero:
         self.aeropuertos_visitados: List[str] = []
         self.actividades_realizadas: List[Dict[str, Any]] = []
         self.trabajos_realizados: List[Dict[str, Any]] = []
+        self.tiempo_libre_registrado: List[Dict[str, Any]] = []
 
     def gastar(self, cantidad: float) -> None:
         """
@@ -249,17 +250,38 @@ class Viajero:
         }
         self.trabajos_realizados.append(trabajo_registrado)
 
-    def presupuesto_bajo(self) -> bool:
+    def registrar_tiempo_libre(self, evento: Dict[str, Any]) -> None:
+        """Record free time spent at an airport."""
+        if not isinstance(evento, dict):
+            raise ValueError("Free time event must be a dictionary")
+
+        aeropuerto = evento.get("aeropuerto")
+        duracion_horas = float(evento.get("duracion_horas", 0) or 0)
+        if not aeropuerto or not isinstance(aeropuerto, str):
+            raise ValueError("Free time event must have a valid airport")
+        if duracion_horas <= 0:
+            raise ValueError("Free time duration must be positive")
+
+        self.consumir_tiempo(duracion_horas)
+        self.tiempo_libre_registrado.append(
+            {
+                "aeropuerto": aeropuerto.upper().strip(),
+                "duracion_horas": duracion_horas,
+                **{k: v for k, v in evento.items() if k not in ["aeropuerto", "duracion_horas"]},
+            }
+        )
+
+    def presupuesto_bajo(self, porcentaje_minimo: float = 35) -> bool:
         """
         Check if the current budget is below the minimum threshold.
 
-        The threshold is 35% of the initial budget. This is typically used
-        to determine if the traveler should seek work opportunities.
+        The threshold percentage is supplied by configuration and defaults
+        to 35 for backwards compatibility.
 
         Returns:
-            True if current budget <= 35% of initial budget, False otherwise.
+            True if current budget <= configured percentage of initial budget.
         """
-        umbral_minimo = self.presupuesto_inicial * 0.35
+        umbral_minimo = self.presupuesto_inicial * (float(porcentaje_minimo) / 100)
         return self.presupuesto_actual <= umbral_minimo
 
     def obtener_resumen(self) -> Dict[str, Any]:
@@ -288,6 +310,10 @@ class Viajero:
             "cantidad_aeropuertos_visitados": len(self.aeropuertos_visitados),
             "cantidad_actividades": len(self.actividades_realizadas),
             "cantidad_trabajos": len(self.trabajos_realizados),
+            "aeropuertos_visitados": list(self.aeropuertos_visitados),
+            "actividades_realizadas": list(self.actividades_realizadas),
+            "trabajos_realizados": list(self.trabajos_realizados),
+            "tiempo_libre_registrado": list(self.tiempo_libre_registrado),
         }
 
     def __str__(self) -> str:

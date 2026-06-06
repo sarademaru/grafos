@@ -31,6 +31,8 @@ class PaginaViajeDinamico(QtWidgets.QWidget):
         self.grafo = None
         self.gestor = None
         self.alternativas = []
+        self.actividades_actuales = []
+        self.trabajos_actuales = []
         self.graph_view = GraphView()
         self._setup_ui()
 
@@ -130,13 +132,51 @@ class PaginaViajeDinamico(QtWidgets.QWidget):
         self._add_status_row(4, "Alimentacion", self.status_labels["alimentacion"])
         self._add_status_row(5, "Hospedaje", self.status_labels["hospedaje"])
 
-        info_title = QLabel("Actividades y trabajos disponibles")
-        info_title.setObjectName("sectionTitle")
-        self.local_info = QTextEdit()
-        self.local_info.setObjectName("routeResults")
-        self.local_info.setReadOnly(True)
-        self.local_info.setMinimumHeight(120)
-        self.local_info.setPlainText("Inicia el viaje para ver opciones del aeropuerto actual.")
+        self.activity_table = QTableWidget(0, 3)
+        self.activity_table.setObjectName("routeResults")
+        self.activity_table.setHorizontalHeaderLabels(["Actividad", "Duracion", "Costo"])
+        self.activity_table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
+        self.activity_table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
+        self.activity_table.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
+        self.activity_table.setAlternatingRowColors(True)
+        self.activity_table.setMinimumHeight(120)
+        self.activity_table.setHorizontalScrollBarPolicy(QtCore.Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self.activity_table.verticalHeader().setVisible(False)
+        self.activity_table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
+        self.activity_table.itemSelectionChanged.connect(self._refresh_action_buttons)
+
+        activity_buttons = QHBoxLayout()
+        self.do_activity_button = QPushButton("Realizar actividad")
+        self.do_activity_button.clicked.connect(self.on_do_activity)
+        activity_buttons.addWidget(self.do_activity_button)
+
+        self.job_table = QTableWidget(0, 3)
+        self.job_table.setObjectName("routeResults")
+        self.job_table.setHorizontalHeaderLabels(["Trabajo", "Tarifa", "Max"])
+        self.job_table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
+        self.job_table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
+        self.job_table.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
+        self.job_table.setAlternatingRowColors(True)
+        self.job_table.setMinimumHeight(120)
+        self.job_table.setHorizontalScrollBarPolicy(QtCore.Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self.job_table.verticalHeader().setVisible(False)
+        self.job_table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
+        self.job_table.itemSelectionChanged.connect(self._refresh_job_hours_limit)
+
+        self.work_hours_spin = QDoubleSpinBox()
+        self.work_hours_spin.setMinimum(0.25)
+        self.work_hours_spin.setMaximum(24)
+        self.work_hours_spin.setDecimals(2)
+        self.work_hours_spin.setSingleStep(0.5)
+        self.work_hours_spin.setSuffix(" h")
+
+        job_form = QFormLayout()
+        job_form.addRow("Horas", self.work_hours_spin)
+
+        job_buttons = QHBoxLayout()
+        self.accept_job_button = QPushButton("Aceptar trabajo")
+        self.accept_job_button.clicked.connect(self.on_accept_job)
+        job_buttons.addWidget(self.accept_job_button)
 
         log_title = QLabel("Registro de decisiones")
         log_title.setObjectName("sectionTitle")
@@ -155,8 +195,13 @@ class PaginaViajeDinamico(QtWidgets.QWidget):
         control_layout.addWidget(self.subsidy_label)
         control_layout.addWidget(self.alternatives_table)
         control_layout.addWidget(self.advance_button)
-        control_layout.addWidget(info_title)
-        control_layout.addWidget(self.local_info)
+        control_layout.addWidget(QLabel("Actividades"))
+        control_layout.addWidget(self.activity_table)
+        control_layout.addLayout(activity_buttons)
+        control_layout.addWidget(QLabel("Trabajos"))
+        control_layout.addWidget(self.job_table)
+        control_layout.addLayout(job_form)
+        control_layout.addLayout(job_buttons)
         control_layout.addWidget(log_title)
         control_layout.addWidget(self.decision_log)
         control_layout.addStretch()
@@ -210,7 +255,11 @@ class PaginaViajeDinamico(QtWidgets.QWidget):
         self.subsidy_label.setStyleSheet("")
         for label in self.status_labels.values():
             label.setText("-")
-        self.local_info.setPlainText("Inicia el viaje para ver opciones del aeropuerto actual.")
+        self.actividades_actuales = []
+        self.trabajos_actuales = []
+        self.activity_table.setRowCount(0)
+        self.job_table.setRowCount(0)
+        self._refresh_action_buttons()
         self.decision_log.setPlainText("Aun no hay decisiones registradas.")
 
     def on_start_trip(self):
@@ -241,6 +290,15 @@ class PaginaViajeDinamico(QtWidgets.QWidget):
             return
 
         alternativa = self.alternativas[index]
+        if not alternativa.get("puede_pagarse", True):
+            QMessageBox.warning(
+                self,
+                "No se puede avanzar",
+                "La alternativa seleccionada no es pagable con el presupuesto o subsidio actual.",
+            )
+            self._refresh_dynamic_view()
+            return
+
         try:
             self.gestor.avanzar_a_destino(alternativa["destino"], alternativa["transporte"])
         except ValueError as exc:
@@ -252,7 +310,7 @@ class PaginaViajeDinamico(QtWidgets.QWidget):
 
     def on_alternative_table_selection_changed(self):
         index = self._selected_table_row()
-        self.advance_button.setEnabled(0 <= index < len(self.alternativas))
+        self.advance_button.setEnabled(self._can_advance_from_index(index))
 
     def _selected_table_row(self):
         selected = self.alternatives_table.selectionModel().selectedRows()
@@ -263,10 +321,21 @@ class PaginaViajeDinamico(QtWidgets.QWidget):
     def _selected_alternative_index(self):
         return self._selected_table_row()
 
+    def _can_advance_from_index(self, index):
+        if index < 0 or index >= len(self.alternativas):
+            return False
+        return bool(self.alternativas[index].get("puede_pagarse", True))
+
+    def _first_payable_alternative_index(self):
+        for index, alternativa in enumerate(self.alternativas):
+            if alternativa.get("puede_pagarse", True):
+                return index
+        return -1
+
     def _refresh_dynamic_view(self):
         self._refresh_status()
         self._refresh_alternatives()
-        self._refresh_local_info()
+        self._refresh_action_controls()
         self._refresh_decision_log()
 
     def _refresh_status(self):
@@ -332,6 +401,7 @@ class PaginaViajeDinamico(QtWidgets.QWidget):
     def _refresh_alternatives_table(self):
         self.alternatives_table.setRowCount(len(self.alternativas))
         if not self.alternativas:
+            self.advance_button.setEnabled(False)
             return
 
         costos = [float(alt.get("costo_vuelo", 0) or 0) for alt in self.alternativas]
@@ -367,7 +437,13 @@ class PaginaViajeDinamico(QtWidgets.QWidget):
                 self._paint_table_cell(row, 4, "#1e3a8a")
 
         self.alternatives_table.resizeRowsToContents()
-        self.alternatives_table.selectRow(0)
+        selectable_row = self._first_payable_alternative_index()
+        if selectable_row >= 0:
+            self.alternatives_table.selectRow(selectable_row)
+            self.advance_button.setEnabled(True)
+        else:
+            self.alternatives_table.clearSelection()
+            self.advance_button.setEnabled(False)
 
     def _paint_table_cell(self, row, column, color):
         item = self.alternatives_table.item(row, column)
@@ -378,31 +454,125 @@ class PaginaViajeDinamico(QtWidgets.QWidget):
         for column in range(self.alternatives_table.columnCount()):
             self._paint_table_cell(row, column, color)
 
-    def _refresh_local_info(self):
+    def _refresh_action_controls(self):
+        self.actividades_actuales = []
+        self.trabajos_actuales = []
+        self.activity_table.setRowCount(0)
+        self.job_table.setRowCount(0)
+
         if not self.gestor:
+            self._refresh_action_buttons()
             return
 
         opciones = self.gestor.obtener_actividades_y_trabajos_actuales()
-        lines = ["Actividades:"]
-        if opciones["actividades"]:
-            for actividad in opciones["actividades"]:
-                lines.append(
-                    f"- {actividad.nombre}: {actividad.duracion_horas:.2f} h, ${actividad.costo_usd:.2f}"
-                )
-        else:
-            lines.append("- No hay actividades registradas.")
+        self.actividades_actuales = list(opciones.get("actividades", []))
+        self.trabajos_actuales = list(opciones.get("trabajos", [])) if self.gestor.puede_trabajar() else []
 
-        lines.append("")
-        lines.append("Trabajos:")
-        if opciones["trabajos"]:
-            for trabajo in opciones["trabajos"]:
-                lines.append(
-                    f"- {trabajo.nombre}: ${trabajo.tarifa_hora:.2f}/h, max {trabajo.max_horas:.2f} h"
-                )
-        else:
-            lines.append("- No hay trabajos registrados.")
+        self.activity_table.clearSpans()
+        self.activity_table.setRowCount(len(self.actividades_actuales))
+        for row, actividad in enumerate(self.actividades_actuales):
+            duracion_min = float(getattr(actividad, "duracion_horas", 0) or 0) * 60
+            costo = float(getattr(actividad, "costo_usd", 0) or 0)
+            values = [actividad.nombre, f"{duracion_min:.0f} min", f"${costo:.2f}"]
+            self._set_table_row(self.activity_table, row, values)
 
-        self.local_info.setPlainText("\n".join(lines))
+        if self.actividades_actuales:
+            self.activity_table.selectRow(0)
+
+        if self.trabajos_actuales:
+            self.job_table.clearSpans()
+            self.job_table.setRowCount(len(self.trabajos_actuales))
+            for row, trabajo in enumerate(self.trabajos_actuales):
+                values = [
+                    trabajo.nombre,
+                    f"${trabajo.tarifa_hora:.2f}/h",
+                    f"{trabajo.max_horas:.2f} h",
+                ]
+                self._set_table_row(self.job_table, row, values)
+            self.job_table.selectRow(0)
+        elif opciones.get("trabajos"):
+            self._set_empty_table_message(
+                self.job_table,
+                3,
+                "Trabajos disponibles solo con presupuesto bajo.",
+            )
+        else:
+            self._set_empty_table_message(self.job_table, 3, "No hay trabajos registrados.")
+
+        if not self.actividades_actuales:
+            self._set_empty_table_message(self.activity_table, 3, "No hay actividades registradas.")
+
+        self._refresh_job_hours_limit()
+        self._refresh_action_buttons()
+
+    def _set_table_row(self, table, row, values):
+        for column, value in enumerate(values):
+            item = QTableWidgetItem(str(value))
+            item.setTextAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
+            table.setItem(row, column, item)
+        table.resizeRowsToContents()
+
+    def _set_empty_table_message(self, table, columns, message):
+        table.clearSpans()
+        table.setRowCount(1)
+        table.setSpan(0, 0, 1, columns)
+        item = QTableWidgetItem(message)
+        item.setTextAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
+        table.setItem(0, 0, item)
+
+    def _refresh_action_buttons(self):
+        has_gestor = self.gestor is not None
+        activity_selected = has_gestor and 0 <= self._selected_activity_row() < len(self.actividades_actuales)
+        job_selected = has_gestor and 0 <= self._selected_job_row() < len(self.trabajos_actuales)
+        self.do_activity_button.setEnabled(activity_selected)
+        self.accept_job_button.setEnabled(job_selected)
+        self.work_hours_spin.setEnabled(job_selected)
+
+    def _refresh_job_hours_limit(self):
+        row = self._selected_job_row()
+        if 0 <= row < len(self.trabajos_actuales):
+            max_horas = float(getattr(self.trabajos_actuales[row], "max_horas", 0) or 0)
+            self.work_hours_spin.setMaximum(max_horas)
+            self.work_hours_spin.setValue(min(max_horas, max(0.25, self.work_hours_spin.value())))
+        self._refresh_action_buttons()
+
+    def _selected_activity_row(self):
+        selected = self.activity_table.selectionModel().selectedRows()
+        if not selected:
+            return -1
+        return selected[0].row()
+
+    def _selected_job_row(self):
+        selected = self.job_table.selectionModel().selectedRows()
+        if not selected:
+            return -1
+        return selected[0].row()
+
+    def on_do_activity(self):
+        if not self.gestor:
+            return
+        row = self._selected_activity_row()
+        if row < 0 or row >= len(self.actividades_actuales):
+            return
+        try:
+            self.gestor.realizar_actividad(self.actividades_actuales[row])
+        except ValueError as exc:
+            QMessageBox.warning(self, "No se puede realizar actividad", str(exc))
+            return
+        self._refresh_dynamic_view()
+
+    def on_accept_job(self):
+        if not self.gestor:
+            return
+        row = self._selected_job_row()
+        if row < 0 or row >= len(self.trabajos_actuales):
+            return
+        try:
+            self.gestor.realizar_trabajo(self.trabajos_actuales[row], self.work_hours_spin.value())
+        except ValueError as exc:
+            QMessageBox.warning(self, "No se puede aceptar trabajo", str(exc))
+            return
+        self._refresh_dynamic_view()
 
     def _refresh_decision_log(self):
         if not self.gestor:
@@ -427,6 +597,25 @@ class PaginaViajeDinamico(QtWidgets.QWidget):
                     f"{index}. {tipo.capitalize()} en {decision['aeropuerto']} | "
                     f"${decision['costo']:.2f} | t={decision['tiempo']:.2f} h"
                 )
+            elif tipo == "actividad":
+                lines.append(
+                    f"{index}. Actividad {decision['actividad']} en {decision['aeropuerto']} | "
+                    f"${decision['costo']:.2f} | {decision['duracion_horas']:.2f} h"
+                )
+            elif tipo == "trabajo":
+                lines.append(
+                    f"{index}. Trabajo {decision['trabajo']} en {decision['aeropuerto']} | "
+                    f"{decision['horas']:.2f} h | +${decision['ingreso']:.2f}"
+                )
+            elif tipo == "tiempo_libre":
+                lines.append(
+                    f"{index}. Tiempo libre en {decision['aeropuerto']} | "
+                    f"{decision['duracion_horas']:.2f} h"
+                )
+            elif tipo == "actividad_omitida":
+                lines.append(f"{index}. Actividad omitida: {decision['actividad']} en {decision['aeropuerto']}")
+            elif tipo == "trabajo_rechazado":
+                lines.append(f"{index}. Trabajo rechazado: {decision['trabajo']} en {decision['aeropuerto']}")
             else:
                 lines.append(f"{index}. {decision.get('descripcion', tipo)}")
 

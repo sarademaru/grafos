@@ -67,8 +67,9 @@ class PaginaReportes(QtWidgets.QWidget):
         self.content_layout.addWidget(self._build_aircraft_comparison_group())
         self.content_layout.addWidget(self._build_visited_destinations_group())
         self.content_layout.addWidget(self._build_flight_legs_group())
-        self.content_layout.addWidget(self._build_pending_group("Actividades Realizadas"))
-        self.content_layout.addWidget(self._build_pending_group("Trabajos Realizados"))
+        self.content_layout.addWidget(self._build_activities_group())
+        self.content_layout.addWidget(self._build_jobs_group())
+        self.content_layout.addWidget(self._build_free_time_group())
         self.content_layout.addWidget(self._build_statistics_group())
         self.content_layout.addStretch()
 
@@ -156,7 +157,20 @@ class PaginaReportes(QtWidgets.QWidget):
 
     def _build_visited_destinations_group(self):
         group, layout = self._new_group("Destinos Visitados")
-        layout.addWidget(self._message("No hay destinos registrados."))
+        viajero = (self.viaje_dinamico or {}).get("viajero", {})
+        visitados = viajero.get("aeropuertos_visitados", [])
+        if not visitados:
+            layout.addWidget(self._message("No hay destinos registrados."))
+            return group
+
+        rows = [[index, aeropuerto] for index, aeropuerto in enumerate(visitados, start=1)]
+        layout.addWidget(
+            self._new_table(
+                ["Orden", "Aeropuerto"],
+                rows,
+                "No hay destinos registrados.",
+            )
+        )
         return group
 
     def _build_flight_legs_group(self):
@@ -189,14 +203,87 @@ class PaginaReportes(QtWidgets.QWidget):
         layout.addWidget(self._message("Pendiente de implementación."))
         return group
 
+    def _build_activities_group(self):
+        actividades = list((self.viaje_dinamico or {}).get("actividades_realizadas", []))
+        rows = [
+            [
+                actividad.get("aeropuerto", "-"),
+                actividad.get("nombre", "-"),
+                f"{float(actividad.get('tiempo_horas', 0) or 0) * 60:.0f} min",
+                self._money(actividad.get("costo", 0)),
+            ]
+            for actividad in actividades
+        ]
+
+        group, layout = self._new_group("Actividades Realizadas")
+        layout.addWidget(
+            self._new_table(
+                ["Aeropuerto", "Actividad", "Duracion", "Costo"],
+                rows,
+                "No hay actividades realizadas registradas.",
+            )
+        )
+        return group
+
+    def _build_jobs_group(self):
+        trabajos = list((self.viaje_dinamico or {}).get("trabajos_realizados", []))
+        rows = [
+            [
+                trabajo.get("aeropuerto", "-"),
+                trabajo.get("descripcion", trabajo.get("nombre", "-")),
+                self._hours(trabajo.get("horas_trabajadas", 0)),
+                f"{self._money(trabajo.get('tarifa_hora', 0))}/h",
+                self._money(trabajo.get("ganancia", 0)),
+            ]
+            for trabajo in trabajos
+        ]
+
+        group, layout = self._new_group("Trabajos Realizados")
+        layout.addWidget(
+            self._new_table(
+                ["Aeropuerto", "Trabajo", "Horas", "Tarifa", "Ingreso Total"],
+                rows,
+                "No hay trabajos realizados registrados.",
+            )
+        )
+        return group
+
+    def _build_free_time_group(self):
+        tiempos_libres = list((self.viaje_dinamico or {}).get("tiempo_libre_registrado", []))
+        rows = [
+            [
+                evento.get("aeropuerto", "-"),
+                self._hours(evento.get("duracion_horas", 0)),
+            ]
+            for evento in tiempos_libres
+        ]
+
+        group, layout = self._new_group("Tiempo Libre Registrado")
+        layout.addWidget(
+            self._new_table(
+                ["Aeropuerto", "Horas libres"],
+                rows,
+                "No hay tiempo libre registrado.",
+            )
+        )
+        return group
+
     def _build_statistics_group(self):
         estado = self.viaje_dinamico or {}
         viajero = estado.get("viajero", {})
         decisiones = list(estado.get("decisiones", []))
         vuelos = [decision for decision in decisiones if decision.get("tipo") == "vuelo"]
+        actividades = list(estado.get("actividades_realizadas", []))
+        trabajos = list(estado.get("trabajos_realizados", []))
+        tiempos_libres = list(estado.get("tiempo_libre_registrado", []))
         distancia = float(estado.get("distancia_volada_km", 0) or 0)
         distancia_subsidiada = float(estado.get("distancia_subsidiada_km", 0) or 0)
         porcentaje = (distancia_subsidiada / distancia * 100) if distancia > 0 else 0.0
+        total_gastado_actividades = sum(float(item.get("costo", 0) or 0) for item in actividades)
+        total_ganado_trabajos = sum(float(item.get("ganancia", 0) or 0) for item in trabajos)
+        tiempo_actividades = sum(float(item.get("tiempo_horas", 0) or 0) for item in actividades)
+        tiempo_trabajos = sum(float(item.get("horas_trabajadas", 0) or 0) for item in trabajos)
+        tiempo_libre = sum(float(item.get("duracion_horas", 0) or 0) for item in tiempos_libres)
 
         rows = [
             ("Distancia recorrida", self._km(distancia)),
@@ -206,6 +293,13 @@ class PaginaReportes(QtWidgets.QWidget):
             ("Cantidad de aeropuertos visitados", str(viajero.get("cantidad_aeropuertos_visitados", 0))),
             ("Distancia subsidiada utilizada", self._km(distancia_subsidiada)),
             ("Porcentaje subsidiado utilizado", f"{porcentaje:.2f}%"),
+            ("Total gastado en actividades", self._money(total_gastado_actividades)),
+            ("Total ganado en trabajos", self._money(total_ganado_trabajos)),
+            ("Tiempo total invertido en actividades", self._hours(tiempo_actividades)),
+            ("Tiempo total invertido en trabajos", self._hours(tiempo_trabajos)),
+            ("Tiempo total libre", self._hours(tiempo_libre)),
+            ("Presupuesto inicial", self._money(viajero.get("presupuesto_inicial", 0))),
+            ("Presupuesto final", self._money(viajero.get("presupuesto_actual", 0))),
         ]
 
         group, layout = self._new_group("Estadísticas")
