@@ -26,6 +26,8 @@ class GestorViaje:
         self.tiempo_transcurrido_horas: float = 0.0
         self.horas_desde_ultima_alimentacion: float = 0.0
         self.horas_desde_ultimo_hospedaje: float = 0.0
+        self.distancia_volada_km: float = 0.0
+        self.distancia_subsidiada_km: float = 0.0
         self.ultimo_aeropuerto_visitado: Optional[str] = None
         self.decisiones: List[Dict[str, Any]] = []
 
@@ -74,7 +76,7 @@ class GestorViaje:
             "tarifa_hora": trabajo.tarifa_hora,
         }
 
-    def realizar_actividad(self, actividad: Any) -> None:
+    def realizar_actividad(self, actividad: Any) -> Dict[str, Any]:
         """Realiza una actividad: acepta `Actividad` o diccionario compatible.
 
         Convierte objetos de dominio a la forma esperada por `Viajero`.
@@ -86,10 +88,27 @@ class GestorViaje:
         else:
             raise ValueError("Actividad debe ser Actividad o dict compatible")
 
+        tiempo_actividad = float(actividad_dict.get("tiempo_horas", 0) or 0)
+        costo_actividad = float(actividad_dict.get("costo", 0) or 0)
+
         # Delegar la ejecucion al viajero (podra lanzar ValueError si insuficientes recursos)
         self.viajero.registrar_actividad(actividad_dict)
+        self._registrar_tiempo_operacion(tiempo_actividad)
 
-    def realizar_trabajo(self, trabajo: Any, horas: float) -> None:
+        decision = {
+            "tipo": "actividad",
+            "actividad": actividad_dict.get("nombre", "Actividad"),
+            "aeropuerto": self._obtener_codigo_actual(),
+            "duracion_horas": tiempo_actividad,
+            "costo": costo_actividad,
+            "tiempo": self.tiempo_transcurrido_horas,
+            "presupuesto_restante": self.viajero.presupuesto_actual,
+            "tiempo_restante_horas": self.viajero.tiempo_restante_horas,
+        }
+        self.decisiones.append(decision)
+        return decision
+
+    def realizar_trabajo(self, trabajo: Any, horas: float) -> Dict[str, Any]:
         """Realiza un trabajo: acepta `Trabajo` o dict compatible y horas a trabajar.
 
         Convierte objetos de dominio a la forma esperada por `Viajero`.
@@ -101,8 +120,26 @@ class GestorViaje:
         else:
             raise ValueError("Trabajo debe ser Trabajo o dict compatible")
 
+        horas_trabajadas = float(horas)
+        tarifa_hora = float(trabajo_dict.get("tarifa_hora", 0) or 0)
+
         # Delegar la ejecucion al viajero
         self.viajero.registrar_trabajo(trabajo_dict, horas)
+        self._registrar_tiempo_operacion(horas_trabajadas)
+
+        decision = {
+            "tipo": "trabajo",
+            "trabajo": trabajo_dict.get("descripcion", "Trabajo"),
+            "aeropuerto": self._obtener_codigo_actual(),
+            "horas": horas_trabajadas,
+            "tarifa_hora": tarifa_hora,
+            "ingreso": tarifa_hora * horas_trabajadas,
+            "tiempo": self.tiempo_transcurrido_horas,
+            "presupuesto_restante": self.viajero.presupuesto_actual,
+            "tiempo_restante_horas": self.viajero.tiempo_restante_horas,
+        }
+        self.decisiones.append(decision)
+        return decision
 
     def obtener_estado(self) -> Dict[str, Any]:
         """Devuelve el estado actual del gestor y del viajero.
@@ -122,6 +159,8 @@ class GestorViaje:
             "tiempo_transcurrido_horas": self.tiempo_transcurrido_horas,
             "horas_desde_ultima_alimentacion": self.horas_desde_ultima_alimentacion,
             "horas_desde_ultimo_hospedaje": self.horas_desde_ultimo_hospedaje,
+            "distancia_volada_km": self.distancia_volada_km,
+            "distancia_subsidiada_km": self.distancia_subsidiada_km,
             "decisiones": list(self.decisiones),
         }
 
@@ -140,6 +179,8 @@ class GestorViaje:
         self.tiempo_transcurrido_horas = 0.0
         self.horas_desde_ultima_alimentacion = 0.0
         self.horas_desde_ultimo_hospedaje = 0.0
+        self.distancia_volada_km = 0.0
+        self.distancia_subsidiada_km = 0.0
         self.ultimo_aeropuerto_visitado = None
         self.decisiones = []
         self.registrar_llegada(aeropuerto_origen)
@@ -157,6 +198,7 @@ class GestorViaje:
             for transporte in self._transportes_para_arista(arista, transportes_preferidos):
                 costo = self._calcular_costo_tramo(arista, transporte)
                 tiempo = self._calcular_tiempo_tramo(arista, transporte)
+                puede_usar_subsidio = self._puede_usar_subsidio(arista)
                 alternativas.append(
                     {
                         "origen": aeropuerto_actual,
@@ -165,7 +207,14 @@ class GestorViaje:
                         "distancia_km": arista.distancia_km,
                         "costo_vuelo": costo,
                         "tiempo_vuelo_horas": tiempo,
-                        "puede_pagarse": costo <= self.viajero.presupuesto_actual,
+                        "tiempo_vuelo_min": tiempo * 60,
+                        "costo_por_km": float(self.grafo.obtener_costo_por_km(transporte) or 0),
+                        "tiempo_min_por_km": float(self.grafo.obtener_tiempo_por_km(transporte) or 0) * 60,
+                        "es_subsidiada": bool(getattr(arista, "costo_cero", False)),
+                        "puede_usar_subsidio": puede_usar_subsidio,
+                        "limite_subsidio_km": self._limite_subsidio_despues_de(arista),
+                        "distancia_subsidiada_usada_km": self.distancia_subsidiada_km,
+                        "puede_pagarse": costo <= self.viajero.presupuesto_actual and puede_usar_subsidio,
                     }
                 )
 
@@ -202,12 +251,18 @@ class GestorViaje:
         transporte_elegido = transporte or self._elegir_transporte_mas_barato(arista)
         if transporte_elegido not in self._transportes_para_arista(arista, None):
             raise ValueError(f"El transporte {transporte_elegido} no esta disponible para esta ruta")
+        if not self._puede_usar_subsidio(arista):
+            raise ValueError("La ruta subsidiada supera el limite del 20% de distancia del viaje")
 
         costo_vuelo = self._calcular_costo_tramo(arista, transporte_elegido)
         tiempo_vuelo = self._calcular_tiempo_tramo(arista, transporte_elegido)
+        distancia_vuelo = float(arista.distancia_km or 0)
 
         self.viajero.gastar(costo_vuelo)
         self._consumir_tiempo_con_obligatorias(tiempo_vuelo)
+        self.distancia_volada_km += distancia_vuelo
+        if getattr(arista, "costo_cero", False):
+            self.distancia_subsidiada_km += distancia_vuelo
         self.registrar_llegada(arista.vertice_destino.identificador)
         eventos_llegada = self._aplicar_obligatorias_en_destino()
 
@@ -216,6 +271,8 @@ class GestorViaje:
             "origen": aeropuerto_actual,
             "destino": arista.vertice_destino.identificador,
             "transporte": transporte_elegido,
+            "distancia_km": distancia_vuelo,
+            "es_subsidiada": bool(getattr(arista, "costo_cero", False)),
             "costo_vuelo": costo_vuelo,
             "tiempo_vuelo_horas": tiempo_vuelo,
             "eventos_obligatorios": eventos_llegada,
@@ -265,6 +322,9 @@ class GestorViaje:
         return min(transportes, key=lambda transporte: self._calcular_costo_tramo(arista, transporte))
 
     def _calcular_costo_tramo(self, arista, transporte: str) -> float:
+        if getattr(arista, "costo_cero", False):
+            return 0.0
+
         distancia = float(arista.distancia_km or 0)
         costo_km = float(self.grafo.obtener_costo_por_km(transporte) or 0)
         return float(arista.costo_base or 0) + distancia * costo_km
@@ -273,6 +333,17 @@ class GestorViaje:
         distancia = float(arista.distancia_km or 0)
         tiempo_km = float(self.grafo.obtener_tiempo_por_km(transporte) or 0)
         return distancia * tiempo_km
+
+    def _limite_subsidio_despues_de(self, arista) -> float:
+        distancia = float(getattr(arista, "distancia_km", 0) or 0)
+        return (self.distancia_volada_km + distancia) * 0.20
+
+    def _puede_usar_subsidio(self, arista) -> bool:
+        if not getattr(arista, "costo_cero", False):
+            return True
+
+        distancia = float(getattr(arista, "distancia_km", 0) or 0)
+        return self.distancia_subsidiada_km + distancia <= self._limite_subsidio_despues_de(arista)
 
     def _consumir_tiempo_con_obligatorias(self, horas: float) -> None:
         horas_restantes = horas
@@ -288,6 +359,11 @@ class GestorViaje:
 
     def _avanzar_reloj(self, horas: float) -> None:
         self.viajero.consumir_tiempo(horas)
+        self.tiempo_transcurrido_horas += horas
+        self.horas_desde_ultima_alimentacion += horas
+        self.horas_desde_ultimo_hospedaje += horas
+
+    def _registrar_tiempo_operacion(self, horas: float) -> None:
         self.tiempo_transcurrido_horas += horas
         self.horas_desde_ultima_alimentacion += horas
         self.horas_desde_ultimo_hospedaje += horas

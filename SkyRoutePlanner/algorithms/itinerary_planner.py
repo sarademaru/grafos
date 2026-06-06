@@ -1,6 +1,6 @@
 from dataclasses import dataclass
 from heapq import heappop, heappush
-from math import inf
+from itertools import count
 
 
 CRITERION_DISTANCE = "distancia"
@@ -142,9 +142,13 @@ def _find_max_destinations_route(
     include_secondary=True,
     require_all_selected_transports=True,
     destination_id=None,
+    max_cost=None,
+    max_time=None,
 ):
     best = None
     tie_breaker = CRITERION_TIME if limit_type == CRITERION_TIME else CRITERION_COST
+    cost_limit = limit_value if limit_type == CRITERION_COST else max_cost
+    time_limit = limit_value if limit_type == CRITERION_TIME else max_time
 
     def backtrack(current_id, visited, path, legs, total_cost, total_time, used_transports):
         nonlocal best
@@ -161,9 +165,9 @@ def _find_max_destinations_route(
 
             next_cost = total_cost + leg.cost
             next_time = total_time + leg.time
-            if limit_type == CRITERION_COST and next_cost > limit_value:
+            if cost_limit is not None and next_cost > cost_limit:
                 continue
-            if limit_type == CRITERION_TIME and next_time > limit_value:
+            if time_limit is not None and next_time > time_limit:
                 continue
 
             visited.add(leg.destination)
@@ -204,41 +208,79 @@ def find_best_route_by_criterion(
     criterion,
     selected_transports,
     include_secondary=True,
+    budget=None,
+    available_time=None,
 ):
     if not grafo.obtener_vertice(origin_id) or not grafo.obtener_vertice(destination_id):
         return None
 
-    distances = {vertex.identificador: inf for vertex in grafo.obtener_vertices()}
-    previous = {}
-    distances[origin_id] = 0
-    heap = [(0, origin_id)]
+    labels_by_vertex = {vertex.identificador: [] for vertex in grafo.obtener_vertices()}
+    origin_label = {
+        "weight": 0,
+        "cost": 0,
+        "time": 0,
+        "path": (origin_id,),
+        "legs": (),
+    }
+    labels_by_vertex[origin_id].append(origin_label)
+    sequence = count()
+    heap = [(0, 0, 0, next(sequence), origin_id, origin_label)]
+
+    def is_dominated(candidate, labels):
+        for label in labels:
+            if (
+                label["weight"] <= candidate["weight"]
+                and label["cost"] <= candidate["cost"]
+                and label["time"] <= candidate["time"]
+            ):
+                return True
+        return False
 
     while heap:
-        current_weight, current_id = heappop(heap)
-        if current_weight > distances[current_id]:
+        current_weight, current_cost, current_time, _, current_id, current_label = heappop(heap)
+        if current_label not in labels_by_vertex[current_id]:
             continue
         if current_id == destination_id:
-            break
+            return _route_summary(current_label["path"], current_label["legs"])
 
         for leg in _candidate_edges(grafo, current_id, selected_transports, include_secondary):
+            if leg.destination in current_label["path"]:
+                continue
+
+            next_cost = current_cost + leg.cost
+            next_time = current_time + leg.time
+            if budget is not None and next_cost > budget:
+                continue
+            if available_time is not None and next_time > available_time:
+                continue
+
             next_weight = current_weight + _criterion_weight(leg, criterion)
-            if next_weight < distances.get(leg.destination, inf):
-                distances[leg.destination] = next_weight
-                previous[leg.destination] = (current_id, leg)
-                heappush(heap, (next_weight, leg.destination))
+            candidate = {
+                "weight": next_weight,
+                "cost": next_cost,
+                "time": next_time,
+                "path": current_label["path"] + (leg.destination,),
+                "legs": current_label["legs"] + (leg,),
+            }
+            destination_labels = labels_by_vertex.get(leg.destination, [])
+            if is_dominated(candidate, destination_labels):
+                continue
 
-    if destination_id not in previous and origin_id != destination_id:
-        return None
+            labels_by_vertex[leg.destination] = [
+                label
+                for label in destination_labels
+                if not (
+                    candidate["weight"] <= label["weight"]
+                    and candidate["cost"] <= label["cost"]
+                    and candidate["time"] <= label["time"]
+                )
+            ]
+            labels_by_vertex[leg.destination].append(candidate)
+            heappush(heap, (next_weight, next_cost, next_time, next(sequence), leg.destination, candidate))
 
-    legs = []
-    current_id = destination_id
-    while current_id != origin_id:
-        previous_id, leg = previous[current_id]
-        legs.append(leg)
-        current_id = previous_id
-
-    legs.reverse()
-    return _route_summary([origin_id] + [leg.destination for leg in legs], legs)
+    if origin_id == destination_id:
+        return _route_summary([origin_id], [])
+    return None
 
 
 def plan_basic_itineraries(
@@ -259,6 +301,7 @@ def plan_basic_itineraries(
             selected_transports=selected_transports,
             include_secondary=include_secondary,
             destination_id=destination_id,
+            max_time=available_time,
         ),
         "max_destinations_by_time": _find_max_destinations_route(
             grafo=grafo,
@@ -268,6 +311,7 @@ def plan_basic_itineraries(
             selected_transports=selected_transports,
             include_secondary=include_secondary,
             destination_id=destination_id,
+            max_cost=budget,
         ),
     }
 
@@ -279,6 +323,8 @@ def plan_routes_by_criteria(
     criteria,
     selected_transports,
     include_secondary=True,
+    budget=None,
+    available_time=None,
 ):
     return {
         criterion: find_best_route_by_criterion(
@@ -288,6 +334,8 @@ def plan_routes_by_criteria(
             criterion=criterion,
             selected_transports=selected_transports,
             include_secondary=include_secondary,
+            budget=budget,
+            available_time=available_time,
         )
         for criterion in criteria
     }
@@ -319,6 +367,8 @@ def plan_itinerary(
         criteria=criteria,
         selected_transports=selected_transports,
         include_secondary=include_secondary,
+        budget=budget,
+        available_time=available_time,
     )
 
     return {

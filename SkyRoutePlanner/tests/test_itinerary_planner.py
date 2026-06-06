@@ -68,6 +68,69 @@ class ItineraryPlannerTest(unittest.TestCase):
 
         self.assertNotIn("C", result["optimized"][CRITERION_COST]["path"])
 
+    def test_basic_alternatives_require_destination_and_all_selected_transports(self):
+        result = plan_itinerary(
+            grafo=self._build_graph(),
+            origin_id="A",
+            destination_id="D",
+            budget=200,
+            available_time=20,
+            criteria=[CRITERION_COST],
+            selected_transports=["Avion Comercial", "Avion Regional", "Helice"],
+            include_secondary=True,
+        )
+
+        budget_route = result["basic"]["max_destinations_by_budget"]
+        time_route = result["basic"]["max_destinations_by_time"]
+
+        self.assertEqual(budget_route["path"], ["A", "B", "C", "D"])
+        self.assertEqual(time_route["path"], ["A", "B", "C", "D"])
+        self.assertEqual(
+            budget_route["transports_used"],
+            ["Avion Comercial", "Avion Regional", "Helice"],
+        )
+
+    def test_optimized_routes_respect_budget_and_time_limits(self):
+        graph = Grafo()
+        graph.configuracion["aeronaves"] = {
+            "Avion Comercial": {"costoKm": 1, "tiempoKm": 1},
+        }
+        for vertex in ("A", "B", "D"):
+            graph.agregar_vertice(vertex, es_hub=True)
+
+        graph.agregar_arista("A", "D", 10, aeronaves=["Avion Comercial"], costo_base=1000)
+        graph.agregar_arista("A", "B", 10, aeronaves=["Avion Comercial"], costo_base=0)
+        graph.agregar_arista("B", "D", 10, aeronaves=["Avion Comercial"], costo_base=0)
+
+        result = plan_itinerary(
+            grafo=graph,
+            origin_id="A",
+            destination_id="D",
+            budget=100,
+            available_time=30,
+            criteria=[CRITERION_DISTANCE],
+            selected_transports=["Avion Comercial"],
+            include_secondary=True,
+        )
+
+        self.assertEqual(result["optimized"][CRITERION_DISTANCE]["path"], ["A", "B", "D"])
+        self.assertLessEqual(result["optimized"][CRITERION_DISTANCE]["total_cost"], 100)
+        self.assertLessEqual(result["optimized"][CRITERION_DISTANCE]["total_time"], 30)
+
+    def test_optimized_routes_return_none_when_no_route_is_feasible(self):
+        result = plan_itinerary(
+            grafo=self._build_graph(),
+            origin_id="A",
+            destination_id="D",
+            budget=50,
+            available_time=20,
+            criteria=[CRITERION_COST],
+            selected_transports=["Avion Comercial", "Avion Regional"],
+            include_secondary=True,
+        )
+
+        self.assertIsNone(result["optimized"][CRITERION_COST])
+
 
 if __name__ == "__main__":
     unittest.main()

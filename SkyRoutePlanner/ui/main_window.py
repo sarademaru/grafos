@@ -219,6 +219,37 @@ class MainWindow(QtWidgets.QMainWindow):
                 border: 1px solid #334155;
                 border-radius: 8px;
             }
+            QGroupBox#reportGroup {
+                background: #111827;
+                border: 1px solid #334155;
+                border-radius: 8px;
+                color: #f8fafc;
+                font-size: 16px;
+                font-weight: 700;
+                margin-top: 12px;
+                padding-top: 10px;
+            }
+            QGroupBox#reportGroup::title {
+                subcontrol-origin: margin;
+                left: 12px;
+                padding: 0 6px;
+            }
+            QTableWidget {
+                background: #0f172a;
+                alternate-background-color: #111827;
+                color: #e2e8f0;
+                border: 1px solid #334155;
+                border-radius: 6px;
+                gridline-color: #334155;
+                selection-background-color: #6d28d9;
+            }
+            QHeaderView::section {
+                background: #1f2937;
+                color: #f8fafc;
+                border: 1px solid #334155;
+                padding: 6px;
+                font-weight: 700;
+            }
             QLabel#dashboardCardLabel,
             QLabel#reportLine {
                 color: #cbd5e1;
@@ -319,6 +350,8 @@ class MainWindow(QtWidgets.QMainWindow):
 
     def on_menu_selected(self, index):
         self.page_stack.setCurrentIndex(index)
+        if index == 3:
+            self._refresh_reports_from_sources()
         self.log_view.append(f"Switched to page index {index}.")
 
     def on_graph_loaded(self, grafo):
@@ -346,5 +379,17 @@ class MainWindow(QtWidgets.QMainWindow):
     def on_route_calculated(self, payload):
         self.last_route_payload = payload
         self.inicio_page.set_last_route(payload)
-        self.reportes_page.set_report(payload)
-        self.log_view.append("Route calculated. Detailed report updated.")
+        self.reportes_page.set_planning_report(payload)
+        self.log_view.append("Route calculated. Reports planning section updated.")
+
+    def _refresh_reports_from_sources(self):
+        gestor = getattr(self.viaje_dinamico_page, "gestor", None)
+        alternativas = getattr(self.viaje_dinamico_page, "alternativas", [])
+        if not gestor:
+            self.reportes_page.set_dynamic_report(None, alternativas)
+            return
+
+        estado = gestor.obtener_estado()
+        estado["actividades_realizadas"] = list(gestor.viajero.actividades_realizadas)
+        estado["trabajos_realizados"] = list(gestor.viajero.trabajos_realizados)
+        self.reportes_page.set_dynamic_report(estado, alternativas)

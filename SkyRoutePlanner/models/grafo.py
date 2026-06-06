@@ -2,6 +2,13 @@ from .vertice import Vertice
 from .arista import Arista
 
 
+DEFAULT_AERONAVES = {
+    "Avion Comercial": {"costoKm": 0.18, "tiempoKm": 0.7 / 60},
+    "Avion Regional": {"costoKm": 0.25, "tiempoKm": 1.1 / 60},
+    "Helice": {"costoKm": 0.12, "tiempoKm": 2.5 / 60},
+}
+
+
 class Grafo:
     """
     Grafo dirigido implementado mediante lista de adyacencia.
@@ -13,7 +20,7 @@ class Grafo:
             "presupuestoMinimoPorcentaje": 35,
             "intervaloAlimentacionHoras": 8,
             "intervaloHospedajeHoras": 20,
-            "aeronaves": {},
+            "aeronaves": dict(DEFAULT_AERONAVES),
         }
 
     def obtener_configuracion(self):
@@ -77,6 +84,7 @@ class Grafo:
         aeronaves=None,
         costo_base=0,
         estancia_minima=0,
+        costo_cero=False,
     ):
         if origen not in self.vertices:
             raise ValueError(f"El aeropuerto {origen} no existe")
@@ -90,6 +98,7 @@ class Grafo:
             aeronaves=aeronaves,
             costo_base=costo_base,
             estancia_minima=estancia_minima,
+            costo_cero=costo_cero,
         )
 
         self.vertices[origen].agregar_adyacencia(arista)

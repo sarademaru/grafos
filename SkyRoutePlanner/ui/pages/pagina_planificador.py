@@ -139,28 +139,13 @@ class PaginaPlanificador(QtWidgets.QWidget):
 
         summary_title = QLabel("Resumen ejecutivo")
         summary_title.setObjectName("sectionTitle")
-        self.summary_route = QLabel("Ruta encontrada: -")
-        self.summary_distance = QLabel("Distancia total: -")
-        self.summary_time = QLabel("Tiempo total: -")
-        self.summary_cost = QLabel("Costo total: -")
-        self.summary_stops = QLabel("Numero de escalas: -")
-
-        for widget in (
-            self.summary_route,
-            self.summary_distance,
-            self.summary_time,
-            self.summary_cost,
-            self.summary_stops,
-        ):
-            widget.setObjectName("infoLabel")
-            widget.setWordWrap(True)
 
         summary_layout.addWidget(summary_title)
-        summary_layout.addWidget(self.summary_route)
-        summary_layout.addWidget(self.summary_distance)
-        summary_layout.addWidget(self.summary_time)
-        summary_layout.addWidget(self.summary_cost)
-        summary_layout.addWidget(self.summary_stops)
+        self.summary_results_layout = QVBoxLayout()
+        self.summary_results_layout.setContentsMargins(0, 0, 0, 0)
+        self.summary_results_layout.setSpacing(10)
+        summary_layout.addLayout(self.summary_results_layout)
+        self._clear_summary()
 
         legend_label = QLabel("Leyenda")
         legend_label.setObjectName("sectionTitle")
@@ -306,19 +291,43 @@ class PaginaPlanificador(QtWidgets.QWidget):
             self.selected_info.setText(msg)
             return
 
-        resultado = plan_itinerary(
-            grafo=self.grafo,
-            origin_id=origen,
-            destination_id=destino,
-            budget=presupuesto,
-            available_time=tiempo,
-            criteria=criterios_sel,
-            selected_transports=transportes_sel,
-            include_secondary=self.sec_include.isChecked(),
-        )
+        resultados_por_criterio = []
+        optimized = {}
+        basic = None
+        for criterio, etiqueta, _ in criterios:
+            if criterio not in criterios_sel:
+                continue
+
+            resultado_criterio = plan_itinerary(
+                grafo=self.grafo,
+                origin_id=origen,
+                destination_id=destino,
+                budget=presupuesto,
+                available_time=tiempo,
+                criteria=[criterio],
+                selected_transports=transportes_sel,
+                include_secondary=self.sec_include.isChecked(),
+            )
+            if basic is None:
+                basic = resultado_criterio.get("basic", {})
+            route = resultado_criterio.get("optimized", {}).get(criterio)
+            optimized[criterio] = route
+            resultados_por_criterio.append(
+                {
+                    "criterion": criterio,
+                    "criterion_label": etiqueta,
+                    "result": resultado_criterio,
+                    "route": route,
+                }
+            )
+
+        resultado = {
+            "basic": basic or {},
+            "optimized": optimized,
+        }
 
         primary_route = self._choose_primary_route(resultado, criterios_sel)
-        self._show_executive_summary(primary_route)
+        self._show_executive_summaries(resultados_por_criterio)
         if primary_route:
             self.graph_view.highlight_route(primary_route["path"])
         else:
@@ -337,6 +346,7 @@ class PaginaPlanificador(QtWidgets.QWidget):
             {
                 "result": resultado,
                 "primary_route": primary_route,
+                "criteria_results": resultados_por_criterio,
                 "context": {
                     "origin": origen,
                     "destination": destino,
@@ -362,25 +372,68 @@ class PaginaPlanificador(QtWidgets.QWidget):
 
         return None
 
-    def _show_executive_summary(self, route):
-        if not route:
-            self.summary_route.setText("Ruta encontrada: No disponible")
-            self.summary_distance.setText("Distancia total: -")
-            self.summary_time.setText("Tiempo total: -")
-            self.summary_cost.setText("Costo total: -")
-            self.summary_stops.setText("Numero de escalas: -")
+    def _show_executive_summaries(self, criteria_results):
+        self._clear_summary(show_placeholder=False)
+        if not criteria_results:
+            self.summary_results_layout.addWidget(self._build_summary_label("Ruta encontrada: No disponible"))
             return
 
-        stops = max(0, len(route["path"]) - 2)
-        self.summary_route.setText(f"Ruta encontrada: {' -> '.join(route['path'])}")
-        self.summary_distance.setText(f"Distancia total: {route['total_distance']:.2f} km")
-        self.summary_time.setText(f"Tiempo total: {route['total_time']:.2f} h")
-        self.summary_cost.setText(f"Costo total: ${route['total_cost']:.2f}")
-        self.summary_stops.setText(f"Numero de escalas: {stops}")
+        for item in criteria_results:
+            self.summary_results_layout.addWidget(
+                self._build_criterion_summary_block(
+                    item.get("criterion_label", item.get("criterion", "-")),
+                    item.get("route"),
+                )
+            )
 
-    def _clear_summary(self):
-        self.summary_route.setText("Ruta encontrada: -")
-        self.summary_distance.setText("Distancia total: -")
-        self.summary_time.setText("Tiempo total: -")
-        self.summary_cost.setText("Costo total: -")
-        self.summary_stops.setText("Numero de escalas: -")
+    def _build_criterion_summary_block(self, criterion_label, route):
+        block = QFrame()
+        block.setObjectName("summaryPanel")
+        layout = QVBoxLayout(block)
+        layout.setContentsMargins(10, 10, 10, 10)
+        layout.setSpacing(6)
+
+        lines = [f"Criterio utilizado: {criterion_label}"]
+        if route:
+            stops = max(0, len(route["path"]) - 2)
+            lines.extend(
+                [
+                    f"Ruta encontrada: {' -> '.join(route['path'])}",
+                    f"Distancia total: {route['total_distance']:.2f} km",
+                    f"Tiempo total: {route['total_time']:.2f} h",
+                    f"Costo total: ${route['total_cost']:.2f}",
+                    f"Numero de escalas: {stops}",
+                ]
+            )
+        else:
+            lines.extend(
+                [
+                    "Ruta encontrada: No disponible",
+                    "Distancia total: -",
+                    "Tiempo total: -",
+                    "Costo total: -",
+                    "Numero de escalas: -",
+                ]
+            )
+
+        for line in lines:
+            layout.addWidget(self._build_summary_label(line))
+
+        return block
+
+    def _build_summary_label(self, text):
+        label = QLabel(text)
+        label.setObjectName("infoLabel")
+        label.setWordWrap(True)
+        return label
+
+    def _clear_summary(self, show_placeholder=True):
+        if not hasattr(self, "summary_results_layout"):
+            return
+        while self.summary_results_layout.count():
+            item = self.summary_results_layout.takeAt(0)
+            widget = item.widget()
+            if widget:
+                widget.deleteLater()
+        if show_placeholder:
+            self.summary_results_layout.addWidget(self._build_summary_label("Ruta encontrada: -"))

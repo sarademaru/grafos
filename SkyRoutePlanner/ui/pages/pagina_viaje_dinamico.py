@@ -1,5 +1,6 @@
-from PyQt6 import QtCore, QtWidgets
+from PyQt6 import QtCore, QtGui, QtWidgets
 from PyQt6.QtWidgets import (
+    QAbstractItemView,
     QComboBox,
     QDoubleSpinBox,
     QFormLayout,
@@ -9,7 +10,10 @@ from PyQt6.QtWidgets import (
     QLabel,
     QMessageBox,
     QPushButton,
+    QHeaderView,
     QSpinBox,
+    QTableWidget,
+    QTableWidgetItem,
     QTextEdit,
     QVBoxLayout,
 )
@@ -82,7 +86,26 @@ class PaginaViajeDinamico(QtWidgets.QWidget):
         self.suggested_label.setObjectName("infoLabel")
         self.suggested_label.setWordWrap(True)
 
-        self.alternatives_combo = QComboBox()
+        self.subsidy_label = QLabel("Distancia subsidiada utilizada: 0.00 km / 0.00 km permitidos (20%)")
+        self.subsidy_label.setObjectName("infoLabel")
+        self.subsidy_label.setWordWrap(True)
+
+        self.alternatives_table = QTableWidget(0, 6)
+        self.alternatives_table.setObjectName("routeResults")
+        self.alternatives_table.setHorizontalHeaderLabels(
+            ["D", "Aero", "(km)", "(USD)", "(horas)", "Sub"]
+        )
+        self.alternatives_table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
+        self.alternatives_table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
+        self.alternatives_table.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
+        self.alternatives_table.setAlternatingRowColors(True)
+        self.alternatives_table.setMinimumHeight(180)
+        self.alternatives_table.setHorizontalScrollBarPolicy(QtCore.Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self.alternatives_table.verticalHeader().setVisible(False)
+        table_header = self.alternatives_table.horizontalHeader()
+        table_header.setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
+        self.alternatives_table.itemSelectionChanged.connect(self.on_alternative_table_selection_changed)
+
         self.advance_button = QPushButton("Avanzar al destino seleccionado")
         self.advance_button.setObjectName("primaryButton")
         self.advance_button.setCursor(QtCore.Qt.CursorShape.PointingHandCursor)
@@ -129,7 +152,8 @@ class PaginaViajeDinamico(QtWidgets.QWidget):
         control_layout.addWidget(status_title)
         control_layout.addLayout(self.status_grid)
         control_layout.addWidget(self.suggested_label)
-        control_layout.addWidget(self.alternatives_combo)
+        control_layout.addWidget(self.subsidy_label)
+        control_layout.addWidget(self.alternatives_table)
         control_layout.addWidget(self.advance_button)
         control_layout.addWidget(info_title)
         control_layout.addWidget(self.local_info)
@@ -170,7 +194,6 @@ class PaginaViajeDinamico(QtWidgets.QWidget):
         self.gestor = None
         self.graph_view.clear_graph()
         self.origin_combo.clear()
-        self.alternatives_combo.clear()
         self._reset_simulation_view()
 
     def _refresh_airports(self):
@@ -180,9 +203,11 @@ class PaginaViajeDinamico(QtWidgets.QWidget):
 
     def _reset_simulation_view(self):
         self.alternativas = []
-        self.alternatives_combo.clear()
+        self.alternatives_table.setRowCount(0)
         self.advance_button.setEnabled(False)
         self.suggested_label.setText("Sugerencia: -")
+        self.subsidy_label.setText("Distancia subsidiada utilizada: 0.00 km / 0.00 km permitidos (20%)")
+        self.subsidy_label.setStyleSheet("")
         for label in self.status_labels.values():
             label.setText("-")
         self.local_info.setPlainText("Inicia el viaje para ver opciones del aeropuerto actual.")
@@ -211,7 +236,7 @@ class PaginaViajeDinamico(QtWidgets.QWidget):
         if not self.gestor:
             return
 
-        index = self.alternatives_combo.currentIndex()
+        index = self._selected_alternative_index()
         if index < 0 or index >= len(self.alternativas):
             return
 
@@ -224,6 +249,19 @@ class PaginaViajeDinamico(QtWidgets.QWidget):
 
         self.graph_view.highlight_route(self.gestor.ruta_actual)
         self._refresh_dynamic_view()
+
+    def on_alternative_table_selection_changed(self):
+        index = self._selected_table_row()
+        self.advance_button.setEnabled(0 <= index < len(self.alternativas))
+
+    def _selected_table_row(self):
+        selected = self.alternatives_table.selectionModel().selectedRows()
+        if not selected:
+            return -1
+        return selected[0].row()
+
+    def _selected_alternative_index(self):
+        return self._selected_table_row()
 
     def _refresh_dynamic_view(self):
         self._refresh_status()
@@ -249,7 +287,6 @@ class PaginaViajeDinamico(QtWidgets.QWidget):
         )
 
     def _refresh_alternatives(self):
-        self.alternatives_combo.clear()
         self.alternativas = []
         self.advance_button.setEnabled(False)
 
@@ -258,6 +295,7 @@ class PaginaViajeDinamico(QtWidgets.QWidget):
             return
 
         self.alternativas = self.gestor.obtener_alternativas_disponibles()
+        self._refresh_subsidy_summary()
         sugerida = self.gestor.sugerir_siguiente_alternativa()
         if sugerida:
             self.suggested_label.setText(
@@ -268,15 +306,77 @@ class PaginaViajeDinamico(QtWidgets.QWidget):
         else:
             self.suggested_label.setText("Sugerencia: no hay vuelos pagables hacia nuevos destinos.")
 
-        for alternativa in self.alternativas:
-            estado_pago = "pagable" if alternativa["puede_pagarse"] else "sin presupuesto"
-            self.alternatives_combo.addItem(
-                f"{alternativa['origen']} -> {alternativa['destino']} | "
-                f"{alternativa['transporte']} | ${alternativa['costo_vuelo']:.2f} | "
-                f"{alternativa['tiempo_vuelo_horas']:.2f} h | {estado_pago}"
-            )
+        self._refresh_alternatives_table()
 
-        self.advance_button.setEnabled(bool(self.alternativas))
+    def _refresh_subsidy_summary(self):
+        if not self.gestor:
+            return
+
+        estado = self.gestor.obtener_estado()
+        utilizada = float(estado.get("distancia_subsidiada_km", 0) or 0)
+        total = float(estado.get("distancia_volada_km", 0) or 0)
+        permitida = total * 0.20
+        self.subsidy_label.setText(
+            "Distancia subsidiada utilizada: "
+            f"{utilizada:.2f} km / {permitida:.2f} km permitidos (20%)"
+        )
+
+        porcentaje = utilizada / permitida if permitida > 0 else 0
+        if porcentaje >= 0.90:
+            self.subsidy_label.setStyleSheet("color: #f87171; font-weight: 700;")
+        elif porcentaje >= 0.75:
+            self.subsidy_label.setStyleSheet("color: #facc15; font-weight: 700;")
+        else:
+            self.subsidy_label.setStyleSheet("")
+
+    def _refresh_alternatives_table(self):
+        self.alternatives_table.setRowCount(len(self.alternativas))
+        if not self.alternativas:
+            return
+
+        costos = [float(alt.get("costo_vuelo", 0) or 0) for alt in self.alternativas]
+        tiempos = [float(alt.get("tiempo_vuelo_horas", 0) or 0) for alt in self.alternativas]
+        menor_costo = min(costos)
+        menor_tiempo = min(tiempos)
+
+        for row, alternativa in enumerate(self.alternativas):
+            values = [
+                alternativa.get("destino", "-"),
+                alternativa.get("transporte", "-"),
+                f"{float(alternativa.get('distancia_km', 0) or 0):.2f}",
+                f"${float(alternativa.get('costo_vuelo', 0) or 0):.2f}",
+                f"{float(alternativa.get('tiempo_vuelo_horas', 0) or 0):.2f}",
+                "Sí" if alternativa.get("es_subsidiada", False) else "No",
+            ]
+
+            for column, value in enumerate(values):
+                item = QTableWidgetItem(str(value))
+                item.setTextAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
+                if not alternativa.get("puede_pagarse", True):
+                    item.setForeground(QtGui.QBrush(QtGui.QColor("#94a3b8")))
+                self.alternatives_table.setItem(row, column, item)
+
+            if alternativa.get("es_subsidiada", False):
+                self._paint_table_row(row, "#713f12")
+
+            costo = float(alternativa.get("costo_vuelo", 0) or 0)
+            tiempo = float(alternativa.get("tiempo_vuelo_horas", 0) or 0)
+            if costo == menor_costo:
+                self._paint_table_cell(row, 3, "#14532d")
+            if tiempo == menor_tiempo:
+                self._paint_table_cell(row, 4, "#1e3a8a")
+
+        self.alternatives_table.resizeRowsToContents()
+        self.alternatives_table.selectRow(0)
+
+    def _paint_table_cell(self, row, column, color):
+        item = self.alternatives_table.item(row, column)
+        if item:
+            item.setBackground(QtGui.QBrush(QtGui.QColor(color)))
+
+    def _paint_table_row(self, row, color):
+        for column in range(self.alternatives_table.columnCount()):
+            self._paint_table_cell(row, column, color)
 
     def _refresh_local_info(self):
         if not self.gestor:

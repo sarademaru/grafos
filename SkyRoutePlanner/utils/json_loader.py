@@ -2,6 +2,7 @@ import json
 from pathlib import Path
 
 from models.grafo import Grafo
+from models.grafo import DEFAULT_AERONAVES
 from models.actividad import Actividad
 from models.trabajo import Trabajo
 
@@ -14,16 +15,21 @@ def _get_value(dct, keys, default=None):
 
 
 def _normalize_aeronaves_config(aeronaves_config):
-    normalized = {}
+    normalized = dict(DEFAULT_AERONAVES)
     if not isinstance(aeronaves_config, dict):
         return normalized
 
     for tipo, datos in aeronaves_config.items():
         if not isinstance(datos, dict):
             continue
+        tiempo_horas_km = _get_value(datos, ["tiempoKm", "timePerKm", "time_per_km"], None)
+        tiempo_min_km = _get_value(datos, ["tiempoMinKm", "tiempo_min_km", "timeMinPerKm"], None)
+        if tiempo_min_km is not None:
+            tiempo_horas_km = float(tiempo_min_km) / 60
+
         normalized[tipo] = {
             "costoKm": _get_value(datos, ["costoKm", "costPerKm", "cost_per_km"], 0),
-            "tiempoKm": _get_value(datos, ["tiempoKm", "timePerKm", "time_per_km"], 0),
+            "tiempoKm": tiempo_horas_km or 0,
         }
     return normalized
 
@@ -35,7 +41,7 @@ def _parse_configuracion(datos):
             "presupuestoMinimoPorcentaje": 35,
             "intervaloAlimentacionHoras": 8,
             "intervaloHospedajeHoras": 20,
-            "aeronaves": {},
+            "aeronaves": dict(DEFAULT_AERONAVES),
         }
 
     return {
@@ -231,6 +237,11 @@ def cargar_json(ruta_archivo):
             aeronaves = _get_value(ruta, ["aeronaves", "aircraft"], [])
             costo_base = _get_value(ruta, ["costoBase", "costBase"], 0)
             estancia_minima = _get_value(ruta, ["estanciaMinima", "minStay"], 0)
+            costo_cero = _get_value(
+                ruta,
+                ["costoCero", "costoDesplazamientoCero", "rutaSubsidiada", "subsidized", "zeroCost"],
+                False,
+            )
 
             if origen and not grafo.existe_vertice(origen):
                 grafo.agregar_vertice(identificador=origen)
@@ -245,6 +256,7 @@ def cargar_json(ruta_archivo):
                     aeronaves=aeronaves,
                     costo_base=costo_base,
                     estancia_minima=estancia_minima,
+                    costo_cero=costo_cero,
                 )
 
         return grafo
@@ -258,6 +270,14 @@ def cargar_json(ruta_archivo):
             origen = _get_value(ruta, ["origin", "from"])
             destino = _get_value(ruta, ["destination", "to"])
             distancia = _get_value(ruta, ["distance_km", "distance"], 0)
+            aeronaves = _get_value(ruta, ["aeronaves", "aircraft"], [])
+            costo_base = _get_value(ruta, ["costoBase", "costBase"], 0)
+            estancia_minima = _get_value(ruta, ["estanciaMinima", "minStay"], 0)
+            costo_cero = _get_value(
+                ruta,
+                ["costoCero", "costoDesplazamientoCero", "rutaSubsidiada", "subsidized", "zeroCost"],
+                False,
+            )
 
             if origen and not grafo.existe_vertice(origen):
                 grafo.agregar_vertice(identificador=origen)
@@ -269,6 +289,10 @@ def cargar_json(ruta_archivo):
                     origen=origen,
                     destino=destino,
                     distancia_km=distancia,
+                    aeronaves=aeronaves,
+                    costo_base=costo_base,
+                    estancia_minima=estancia_minima,
+                    costo_cero=costo_cero,
                 )
 
         return grafo

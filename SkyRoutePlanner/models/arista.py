@@ -10,6 +10,7 @@ class Arista:
         aeronaves=None,
         costo_base=0,
         estancia_minima=0,
+        costo_cero=False,
     ):
         self.vertice_destino = vertice_destino
         self.distancia_km = distancia_km
@@ -18,6 +19,7 @@ class Arista:
 
         self.costo_base = costo_base
         self.estancia_minima = estancia_minima
+        self.costo_cero = bool(costo_cero)
 
     def obtener_peso(self):
         """

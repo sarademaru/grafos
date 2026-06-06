@@ -1,14 +1,22 @@
-from PyQt6 import QtCore, QtWidgets
-
-from algorithms.itinerary_planner import CRITERION_COST, CRITERION_DISTANCE, CRITERION_TIME
+from PyQt6 import QtCore, QtGui, QtWidgets
+from PyQt6.QtWidgets import (
+    QAbstractItemView,
+    QGroupBox,
+    QHeaderView,
+    QLabel,
+    QTableWidget,
+    QTableWidgetItem,
+)
 
 
 class PaginaReportes(QtWidgets.QWidget):
-    """Detailed route reports."""
+    """Vista de consulta para datos ya generados por el planificador y el viaje."""
 
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.last_payload = None
+        self.planificacion = None
+        self.viaje_dinamico = None
+        self.alternativas_aeronaves = []
         self._setup_ui()
 
     def _setup_ui(self):
@@ -16,7 +24,7 @@ class PaginaReportes(QtWidgets.QWidget):
         layout.setContentsMargins(24, 24, 24, 24)
         layout.setSpacing(16)
 
-        title = QtWidgets.QLabel("Reportes")
+        title = QLabel("Reportes")
         title.setObjectName("pageTitle")
         title.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
         layout.addWidget(title)
@@ -33,71 +41,35 @@ class PaginaReportes(QtWidgets.QWidget):
         self.scroll.setWidget(self.content)
 
         layout.addWidget(self.scroll, stretch=1)
-        self._show_placeholder()
+        self.refresh_report()
 
     def clear_report(self):
-        self.last_payload = None
-        self._show_placeholder()
+        self.planificacion = None
+        self.viaje_dinamico = None
+        self.alternativas_aeronaves = []
+        self.refresh_report()
 
     def set_report(self, payload):
-        self.last_payload = payload
+        self.set_planning_report(payload)
+
+    def set_planning_report(self, payload):
+        self.planificacion = payload
+        self.refresh_report()
+
+    def set_dynamic_report(self, estado=None, alternativas=None):
+        self.viaje_dinamico = estado
+        self.alternativas_aeronaves = list(alternativas or [])
+        self.refresh_report()
+
+    def refresh_report(self):
         self._clear_content()
-
-        if not payload:
-            self._show_placeholder()
-            return
-
-        context = payload.get("context", {})
-        self.content_layout.addWidget(
-            self._build_card(
-                "Resumen del calculo",
-                [
-                    f"Origen: {context.get('origin', '-')}",
-                    f"Destino: {context.get('destination', '-')}",
-                    f"Presupuesto: ${context.get('budget', 0):.2f}",
-                    f"Tiempo disponible: {context.get('available_time', 0)} h",
-                    f"Criterios: {', '.join(context.get('criteria_labels', []))}",
-                    f"Aeronaves: {', '.join(context.get('selected_transports', []))}",
-                    f"Secundarios: {'Incluir' if context.get('include_secondary') else 'Excluir'}",
-                ],
-            )
-        )
-
-        result = payload.get("result", {})
-        basic = result.get("basic", {})
-        self.content_layout.addWidget(
-            self._build_route_card(
-                "Alternativa A: mayor cantidad de destinos por presupuesto",
-                basic.get("max_destinations_by_budget"),
-            )
-        )
-        self.content_layout.addWidget(
-            self._build_route_card(
-                "Alternativa B: mayor cantidad de destinos en menor tiempo",
-                basic.get("max_destinations_by_time"),
-            )
-        )
-
-        criterion_names = {
-            CRITERION_DISTANCE: "Distancia",
-            CRITERION_TIME: "Tiempo",
-            CRITERION_COST: "Costo USD",
-        }
-        for criterion, route in result.get("optimized", {}).items():
-            self.content_layout.addWidget(
-                self._build_route_card(f"Criterio: {criterion_names.get(criterion, criterion)}", route)
-            )
-
-        self.content_layout.addStretch()
-
-    def _show_placeholder(self):
-        self._clear_content()
-        placeholder = QtWidgets.QLabel("No hay reportes disponibles. Calcula una ruta en el Planificador.")
-        placeholder.setObjectName("infoLabel")
-        placeholder.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
-        placeholder.setWordWrap(True)
-        self.content_layout.addStretch()
-        self.content_layout.addWidget(placeholder)
+        self.content_layout.addWidget(self._build_planning_group())
+        self.content_layout.addWidget(self._build_aircraft_comparison_group())
+        self.content_layout.addWidget(self._build_visited_destinations_group())
+        self.content_layout.addWidget(self._build_flight_legs_group())
+        self.content_layout.addWidget(self._build_pending_group("Actividades Realizadas"))
+        self.content_layout.addWidget(self._build_pending_group("Trabajos Realizados"))
+        self.content_layout.addWidget(self._build_statistics_group())
         self.content_layout.addStretch()
 
     def _clear_content(self):
@@ -107,41 +79,268 @@ class PaginaReportes(QtWidgets.QWidget):
             if widget:
                 widget.deleteLater()
 
-    def _build_card(self, title, lines):
-        frame = QtWidgets.QFrame()
-        frame.setObjectName("reportCard")
-        layout = QtWidgets.QVBoxLayout(frame)
-        layout.setContentsMargins(16, 14, 16, 14)
-        layout.setSpacing(8)
+    def _build_planning_group(self):
+        group, layout = self._new_group("Planificación de Ruta")
 
-        title_label = QtWidgets.QLabel(title)
-        title_label.setObjectName("reportCardTitle")
-        layout.addWidget(title_label)
+        if not self.planificacion:
+            layout.addWidget(self._message("No hay una planificación calculada."))
+            return group
 
-        for line in lines:
-            label = QtWidgets.QLabel(line)
-            label.setObjectName("reportLine")
-            label.setWordWrap(True)
-            layout.addWidget(label)
-
-        return frame
-
-    def _build_route_card(self, title, route):
-        if not route or not route.get("legs"):
-            return self._build_card(
-                title,
-                ["No se encontro una ruta valida con las restricciones actuales."],
-            )
-
-        stops = route["path"][1:-1]
-        lines = [
-            f"Secuencia completa: {' -> '.join(route['path'])}",
-            f"Escalas: {', '.join(stops) if stops else 'Sin escalas'}",
-            f"Distancia total: {route['total_distance']:.2f} km",
-            f"Tiempo total: {route['total_time']:.2f} h",
-            f"Costo total: ${route['total_cost']:.2f}",
-            f"Transportes utilizados: {', '.join(route['transports_used'])}",
-            "Tramos:",
+        context = self.planificacion.get("context", {})
+        rows = [
+            ("Origen", context.get("origin", "-")),
+            ("Destino", context.get("destination", "-")),
+            ("Presupuesto inicial", self._money(context.get("budget", 0))),
+            ("Tiempo disponible", self._hours(context.get("available_time", 0))),
+            ("Criterios seleccionados", ", ".join(context.get("criteria_labels", [])) or "-"),
         ]
-        lines.extend(route["formatted_legs"])
-        return self._build_card(title, lines)
+        layout.addLayout(self._details_grid(rows))
+
+        layout.addWidget(
+            self._route_summary_box(
+                "Alternativa A",
+                self._get_basic_route("max_destinations_by_budget"),
+                "No existe una ruta factible que llegue al destino, respete el presupuesto y use los transportes requeridos.",
+            )
+        )
+        layout.addWidget(
+            self._route_summary_box(
+                "Alternativa B",
+                self._get_basic_route("max_destinations_by_time"),
+                "No existe una ruta factible que llegue al destino, respete el tiempo disponible y use los transportes requeridos.",
+            )
+        )
+        return group
+
+    def _build_aircraft_comparison_group(self):
+        rows = [
+            [
+                alt.get("destino", "-"),
+                alt.get("transporte", "-"),
+                self._km(alt.get("distancia_km", 0)),
+                self._money(alt.get("costo_vuelo", 0)),
+                self._hours(alt.get("tiempo_vuelo_horas", 0)),
+                "Sí" if alt.get("es_subsidiada", False) else "No",
+            ]
+            for alt in self.alternativas_aeronaves
+        ]
+
+        table = self._new_table(
+            ["Destino", "Aeronave", "Distancia", "Costo", "Tiempo", "Subsidiada"],
+            rows,
+            "No hay alternativas evaluadas para comparar aeronaves.",
+        )
+
+        if self.alternativas_aeronaves:
+            costos = [float(alt.get("costo_vuelo", 0) or 0) for alt in self.alternativas_aeronaves]
+            tiempos = [float(alt.get("tiempo_vuelo_horas", 0) or 0) for alt in self.alternativas_aeronaves]
+            menor_costo = min(costos)
+            menor_tiempo = min(tiempos)
+            for row, alt in enumerate(self.alternativas_aeronaves):
+                if alt.get("es_subsidiada", False):
+                    self._paint_row(table, row, "#713f12")
+                if float(alt.get("costo_vuelo", 0) or 0) == menor_costo:
+                    self._paint_cell(table, row, 3, "#14532d")
+                if float(alt.get("tiempo_vuelo_horas", 0) or 0) == menor_tiempo:
+                    self._paint_cell(table, row, 4, "#1e3a8a")
+
+        group, layout = self._new_group("Comparación de Aeronaves")
+        layout.addWidget(table)
+        return group
+
+    def _build_visited_destinations_group(self):
+        group, layout = self._new_group("Destinos Visitados")
+        layout.addWidget(self._message("No hay destinos registrados."))
+        return group
+
+    def _build_flight_legs_group(self):
+        decisiones = list((self.viaje_dinamico or {}).get("decisiones", []))
+        rows = [
+            [
+                decision.get("origen", "-"),
+                decision.get("destino", "-"),
+                decision.get("transporte", "-"),
+                self._km(decision.get("distancia_km", 0)),
+                self._hours(decision.get("tiempo_vuelo_horas", 0)),
+                self._money(decision.get("costo_vuelo", 0)),
+            ]
+            for decision in decisiones
+            if decision.get("tipo") == "vuelo"
+        ]
+
+        group, layout = self._new_group("Tramos Volados")
+        layout.addWidget(
+            self._new_table(
+                ["Origen", "Destino", "Aeronave", "Distancia", "Tiempo", "Costo"],
+                rows,
+                "No hay tramos volados registrados.",
+            )
+        )
+        return group
+
+    def _build_pending_group(self, title):
+        group, layout = self._new_group(title)
+        layout.addWidget(self._message("Pendiente de implementación."))
+        return group
+
+    def _build_statistics_group(self):
+        estado = self.viaje_dinamico or {}
+        viajero = estado.get("viajero", {})
+        decisiones = list(estado.get("decisiones", []))
+        vuelos = [decision for decision in decisiones if decision.get("tipo") == "vuelo"]
+        distancia = float(estado.get("distancia_volada_km", 0) or 0)
+        distancia_subsidiada = float(estado.get("distancia_subsidiada_km", 0) or 0)
+        porcentaje = (distancia_subsidiada / distancia * 100) if distancia > 0 else 0.0
+
+        rows = [
+            ("Distancia recorrida", self._km(distancia)),
+            ("Tiempo acumulado", self._hours(estado.get("tiempo_transcurrido_horas", 0))),
+            ("Costo acumulado", self._money(viajero.get("gasto_total", 0))),
+            ("Cantidad de vuelos", str(len(vuelos))),
+            ("Cantidad de aeropuertos visitados", str(viajero.get("cantidad_aeropuertos_visitados", 0))),
+            ("Distancia subsidiada utilizada", self._km(distancia_subsidiada)),
+            ("Porcentaje subsidiado utilizado", f"{porcentaje:.2f}%"),
+        ]
+
+        group, layout = self._new_group("Estadísticas")
+        layout.addLayout(self._details_grid(rows))
+        return group
+
+    def _get_basic_route(self, key):
+        result = self.planificacion.get("result", {}) if self.planificacion else {}
+        basic = result.get("basic", {}) if isinstance(result, dict) else {}
+        route = basic.get(key) if isinstance(basic, dict) else None
+        if self._has_route_data(route):
+            return route
+
+        criteria_results = self.planificacion.get("criteria_results", []) if self.planificacion else []
+        for item in criteria_results:
+            item_result = item.get("result", {}) if isinstance(item, dict) else {}
+            item_basic = item_result.get("basic", {}) if isinstance(item_result, dict) else {}
+            route = item_basic.get(key) if isinstance(item_basic, dict) else None
+            if self._has_route_data(route):
+                return route
+
+        return route
+
+    def _has_route_data(self, route):
+        if not isinstance(route, dict):
+            return False
+        return bool(route.get("legs")) or len(route.get("path", [])) > 1
+
+    def _route_summary_box(self, title, route, empty_message="No hay una planificacion calculada."):
+        box, layout = self._new_group(title)
+        if not self._has_route_data(route):
+            layout.addWidget(self._message(empty_message))
+            return box
+
+        stops = route.get("path", [])[1:-1]
+        rows = [
+            ("Secuencia completa", " -> ".join(route.get("path", [])) or "-"),
+            ("Escalas intermedias", ", ".join(stops) if stops else "Sin escalas"),
+            ("Transportes utilizados", ", ".join(route.get("transports_used", [])) or "-"),
+            ("Distancia total", self._km(route.get("total_distance", 0))),
+            ("Costo total", self._money(route.get("total_cost", 0))),
+            ("Tiempo total", self._hours(route.get("total_time", 0))),
+        ]
+        layout.addLayout(self._details_grid(rows))
+        layout.addWidget(
+            self._new_table(
+                ["Origen", "Destino", "Aeronave", "Distancia", "Costo", "Tiempo"],
+                self._route_leg_rows(route),
+                "No hay tramos registrados para esta alternativa.",
+            )
+        )
+        return box
+
+    def _route_leg_rows(self, route):
+        rows = []
+        for leg in route.get("legs", []):
+            rows.append(
+                [
+                    self._leg_value(leg, "origin", "-"),
+                    self._leg_value(leg, "destination", "-"),
+                    self._leg_value(leg, "transport", "-"),
+                    self._km(self._leg_value(leg, "distance", 0)),
+                    self._money(self._leg_value(leg, "cost", 0)),
+                    self._hours(self._leg_value(leg, "time", 0)),
+                ]
+            )
+        return rows
+
+    def _leg_value(self, leg, key, default=None):
+        if isinstance(leg, dict):
+            return leg.get(key, default)
+        return getattr(leg, key, default)
+
+    def _details_grid(self, rows):
+        grid = QtWidgets.QGridLayout()
+        grid.setHorizontalSpacing(18)
+        grid.setVerticalSpacing(8)
+        for row, (label, value) in enumerate(rows):
+            label_widget = QLabel(str(label))
+            label_widget.setObjectName("infoLabel")
+            value_widget = QLabel(str(value))
+            value_widget.setObjectName("infoValue")
+            value_widget.setWordWrap(True)
+            grid.addWidget(label_widget, row, 0)
+            grid.addWidget(value_widget, row, 1)
+        return grid
+
+    def _new_group(self, title):
+        group = QGroupBox(title)
+        group.setObjectName("reportGroup")
+        layout = QtWidgets.QVBoxLayout(group)
+        layout.setContentsMargins(14, 18, 14, 14)
+        layout.setSpacing(10)
+        return group, layout
+
+    def _new_table(self, headers, rows, empty_message):
+        row_count = len(rows) if rows else 1
+        table = QTableWidget(row_count, len(headers))
+        table.setHorizontalHeaderLabels(headers)
+        table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
+        table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
+        table.setAlternatingRowColors(True)
+        table.verticalHeader().setVisible(False)
+        table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
+        table.setMinimumHeight(120)
+
+        if rows:
+            for row_index, values in enumerate(rows):
+                for column_index, value in enumerate(values):
+                    item = QTableWidgetItem(str(value))
+                    item.setTextAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
+                    table.setItem(row_index, column_index, item)
+        else:
+            table.setSpan(0, 0, 1, len(headers))
+            item = QTableWidgetItem(empty_message)
+            item.setTextAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
+            table.setItem(0, 0, item)
+
+        table.resizeRowsToContents()
+        return table
+
+    def _message(self, text):
+        label = QLabel(text)
+        label.setObjectName("infoLabel")
+        label.setWordWrap(True)
+        return label
+
+    def _paint_cell(self, table, row, column, color):
+        item = table.item(row, column)
+        if item:
+            item.setBackground(QtGui.QBrush(QtGui.QColor(color)))
+
+    def _paint_row(self, table, row, color):
+        for column in range(table.columnCount()):
+            self._paint_cell(table, row, column, color)
+
+    def _money(self, value):
+        return f"${float(value or 0):.2f}"
+
+    def _hours(self, value):
+        return f"{float(value or 0):.2f} h"
+
+    def _km(self, value):
+        return f"{float(value or 0):.2f} km"
