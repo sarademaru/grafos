@@ -273,6 +273,8 @@ class GestorViaje:
 
         alternativas = []
         for arista in vertice.adyacencias:
+            if arista.esta_bloqueada():
+                continue
             for transporte in self._transportes_para_arista(arista, transportes_preferidos):
                 costo = self._calcular_costo_tramo(arista, transporte)
                 tiempo = self._calcular_tiempo_tramo(arista, transporte)
@@ -325,6 +327,8 @@ class GestorViaje:
         arista = self._buscar_arista(aeropuerto_actual, destino)
         if arista is None:
             raise ValueError(f"No existe ruta directa de {aeropuerto_actual} a {destino}")
+        if arista.esta_bloqueada():
+            raise ValueError(f"La ruta {aeropuerto_actual} -> {destino} esta bloqueada")
 
         transporte_elegido = transporte or self._elegir_transporte_mas_barato(arista)
         if transporte_elegido not in self._transportes_para_arista(arista, None):
@@ -510,3 +514,11 @@ class GestorViaje:
                 "presupuesto": self.viajero.presupuesto_actual,
             }
         )
+    def bloquear_ruta(self, origen: str, destino: str) -> None:
+        """Bloquea una ruta directa entre origen y destino."""
+        origen = origen.upper().strip()
+        destino = destino.upper().strip()
+        arista = self._buscar_arista(origen, destino)
+        if arista is None:
+            raise ValueError(f"No existe ruta directa de {origen} a {destino}")
+        arista.bloquear()

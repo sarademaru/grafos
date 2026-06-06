@@ -80,12 +80,14 @@ class NodoGrafico(QGraphicsEllipseItem):
 class AristaGrafica:
     """Graphical edge with directed arrow and distance label."""
 
-    def __init__(self, origin_id, destination_id, source_item, target_item, distancia_km):
+    def __init__(self, origin_id, destination_id, source_item, target_item, distancia_km, arista=None):
         self.origin_id = origin_id
         self.destination_id = destination_id
         self.source_item = source_item
         self.target_item = target_item
         self.distancia_km = distancia_km
+        self.arista = arista
+        self.highlighted = False
         self.line_item = None
         self.arrow_item = None
         self.label_item = None
@@ -106,19 +108,16 @@ class AristaGrafica:
         end_point = end - QPointF(direction.x() * offset / length, direction.y() * offset / length)
 
         self.line_item = QGraphicsLineItem(start_point.x(), start_point.y(), end_point.x(), end_point.y())
-        self.line_item.setPen(QPen(QColor("#e5e7eb"), 2))
         self.line_item.setZValue(0)
         scene.addItem(self.line_item)
 
         arrow_polygon = self._build_arrow(end_point, start_point)
         self.arrow_item = QGraphicsPolygonItem(arrow_polygon)
-        self.arrow_item.setBrush(QBrush(QColor("#e5e7eb")))
         self.arrow_item.setPen(QPen(Qt.PenStyle.NoPen))
         self.arrow_item.setZValue(0)
         scene.addItem(self.arrow_item)
 
         self.label_item = QGraphicsTextItem(f"{self.distancia_km} km")
-        self.label_item.setDefaultTextColor(QColor("#f8fafc"))
         label_font = QFont("Consolas", 9)
         self.label_item.setFont(label_font)
         midpoint = QPointF((start_point.x() + end_point.x()) / 2, (start_point.y() + end_point.y()) / 2)
@@ -126,20 +125,40 @@ class AristaGrafica:
         self.label_item.setPos(midpoint.x() - label_rect.width() / 2, midpoint.y() - label_rect.height() / 2)
         self.label_item.setZValue(0)
         scene.addItem(self.label_item)
+        self.refresh_style()
 
     def set_highlighted(self, highlighted):
+        self.highlighted = highlighted
+        self.refresh_style()
+
+    def refresh_style(self):
         if not self.line_item:
             return
 
-        color = QColor("#facc15") if highlighted else QColor("#e5e7eb")
-        width = 4 if highlighted else 2
-        self.line_item.setPen(QPen(color, width))
+        is_blocked = bool(self.arista and self.arista.esta_bloqueada())
+        if is_blocked:
+            color = QColor("#991b1b")
+            label_color = QColor("#fca5a5")
+            pen = QPen(color, 3)
+            pen.setStyle(Qt.PenStyle.DashLine)
+            opacity = 0.45
+        else:
+            color = QColor("#facc15") if self.highlighted else QColor("#e5e7eb")
+            label_color = color if self.highlighted else QColor("#f8fafc")
+            pen = QPen(color, 4 if self.highlighted else 2)
+            pen.setStyle(Qt.PenStyle.SolidLine)
+            opacity = 1.0
+
+        self.line_item.setPen(pen)
+        self.line_item.setOpacity(opacity)
 
         if self.arrow_item:
             self.arrow_item.setBrush(QBrush(color))
+            self.arrow_item.setOpacity(opacity)
 
         if self.label_item:
-            self.label_item.setDefaultTextColor(color if highlighted else QColor("#f8fafc"))
+            self.label_item.setDefaultTextColor(label_color)
+            self.label_item.setOpacity(0.7 if is_blocked else 1.0)
 
     def _build_arrow(self, tip, tail):
         direction = tail - tip
@@ -215,6 +234,7 @@ class GraphView(QGraphicsView):
                     source_node,
                     target_node,
                     arista.distancia_km,
+                    arista,
                 )
                 edge.add_to_scene(self.scene)
                 self.edge_items.append(edge)
@@ -284,6 +304,11 @@ class GraphView(QGraphicsView):
         super().resizeEvent(event)
         if self.grafo:
             self._zoom_to_fit()
+
+    def refresh_graph_state(self):
+        for edge in self.edge_items:
+            edge.refresh_style()
+        self.viewport().update()
 
     def highlight_route(self, path):
         route_edges = set()

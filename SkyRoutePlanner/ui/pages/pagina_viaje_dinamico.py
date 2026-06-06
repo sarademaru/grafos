@@ -114,6 +114,25 @@ class PaginaViajeDinamico(QtWidgets.QWidget):
         self.advance_button.clicked.connect(self.on_advance_selected)
         self.advance_button.setEnabled(False)
 
+        routes_title = QLabel("Interrupciones de Ruta")
+        routes_title.setObjectName("sectionTitle")
+        self.routes_table = QTableWidget(0, 3)
+        self.routes_table.setObjectName("routeResults")
+        self.routes_table.setHorizontalHeaderLabels(["Origen", "Destino", "Estado"])
+        self.routes_table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
+        self.routes_table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
+        self.routes_table.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
+        self.routes_table.setAlternatingRowColors(True)
+        self.routes_table.setMinimumHeight(120)
+        self.routes_table.setHorizontalScrollBarPolicy(QtCore.Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self.routes_table.verticalHeader().setVisible(False)
+        self.routes_table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
+
+        self.block_route_button = QPushButton("Bloquear Ruta")
+        self.block_route_button.setObjectName("primaryButton")
+        self.block_route_button.setCursor(QtCore.Qt.CursorShape.PointingHandCursor)
+        self.block_route_button.clicked.connect(self.on_block_route)
+
         status_title = QLabel("Estado actual")
         status_title.setObjectName("sectionTitle")
         self.status_grid = QGridLayout()
@@ -195,6 +214,9 @@ class PaginaViajeDinamico(QtWidgets.QWidget):
         control_layout.addWidget(self.subsidy_label)
         control_layout.addWidget(self.alternatives_table)
         control_layout.addWidget(self.advance_button)
+        control_layout.addWidget(routes_title)
+        control_layout.addWidget(self.routes_table)
+        control_layout.addWidget(self.block_route_button)
         control_layout.addWidget(QLabel("Actividades"))
         control_layout.addWidget(self.activity_table)
         control_layout.addLayout(activity_buttons)
@@ -259,6 +281,7 @@ class PaginaViajeDinamico(QtWidgets.QWidget):
         self.trabajos_actuales = []
         self.activity_table.setRowCount(0)
         self.job_table.setRowCount(0)
+        self.routes_table.setRowCount(0)
         self._refresh_action_buttons()
         self.decision_log.setPlainText("Aun no hay decisiones registradas.")
 
@@ -335,6 +358,7 @@ class PaginaViajeDinamico(QtWidgets.QWidget):
     def _refresh_dynamic_view(self):
         self._refresh_status()
         self._refresh_alternatives()
+        self._refresh_routes_panel()
         self._refresh_action_controls()
         self._refresh_decision_log()
 
@@ -453,6 +477,12 @@ class PaginaViajeDinamico(QtWidgets.QWidget):
     def _paint_table_row(self, row, color):
         for column in range(self.alternatives_table.columnCount()):
             self._paint_table_cell(row, column, color)
+
+    def _paint_routes_table_row(self, row, color):
+        for column in range(self.routes_table.columnCount()):
+            item = self.routes_table.item(row, column)
+            if item:
+                item.setBackground(QtGui.QBrush(QtGui.QColor(color)))
 
     def _refresh_action_controls(self):
         self.actividades_actuales = []
@@ -620,3 +650,53 @@ class PaginaViajeDinamico(QtWidgets.QWidget):
                 lines.append(f"{index}. {decision.get('descripcion', tipo)}")
 
         self.decision_log.setPlainText("\n".join(lines))
+
+    def _refresh_routes_panel(self):
+        self.routes_table.clearSpans()
+        self.routes_table.setRowCount(0)
+        if not self.grafo:
+            return
+
+        aristas = []
+        for vertice in self.grafo.obtener_vertices():
+            for arista in vertice.adyacencias:
+                aristas.append((vertice.identificador, arista))
+
+        self.routes_table.setRowCount(len(aristas))
+        for row, (origen, arista) in enumerate(aristas):
+            destino = arista.vertice_destino.identificador
+            estado = "Bloqueada" if arista.esta_bloqueada() else "Activa"
+            values = [origen, destino, estado]
+            self._set_table_row(self.routes_table, row, values)
+
+            if arista.esta_bloqueada():
+                self._paint_routes_table_row(row, "#dc2626")
+
+    def on_block_route(self):
+        if not self.gestor:
+            QMessageBox.warning(self, "Validacion", "Inicia un viaje antes de bloquear rutas.")
+            return
+
+        selected = self.routes_table.selectionModel().selectedRows()
+        if not selected:
+            QMessageBox.warning(self, "Validacion", "Selecciona una ruta para bloquear.")
+            return
+
+        row = selected[0].row()
+        origen_item = self.routes_table.item(row, 0)
+        destino_item = self.routes_table.item(row, 1)
+        if not origen_item or not destino_item:
+            return
+
+        origen = origen_item.text()
+        destino = destino_item.text()
+
+        try:
+            self.gestor.bloquear_ruta(origen, destino)
+        except ValueError as exc:
+            QMessageBox.warning(self, "Error al bloquear ruta", str(exc))
+            return
+
+        self._refresh_routes_panel()
+        self._refresh_alternatives()
+        self.graph_view.refresh_graph_state()

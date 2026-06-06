@@ -114,6 +114,33 @@ class Grafo:
 
     def cantidad_vertices(self):
         return len(self.vertices)
+    
+    def bloquear_arista(self, origen, destino):
+        """Bloquea la ruta entre origen y destino."""
+        vertice_origen = self.obtener_vertice(origen)
+        if vertice_origen:
+            for arista in vertice_origen.adyacencias:
+                if arista.vertice_destino.identificador == destino:
+                    arista.bloquear()
+                    return True
+        return False
+    
+    def desbloquear_arista(self, origen, destino):
+        """Desbloquea la ruta entre origen y destino."""
+        vertice_origen = self.obtener_vertice(origen)
+        if vertice_origen:
+            for arista in vertice_origen.adyacencias:
+                if arista.vertice_destino.identificador == destino:
+                    arista.desbloquear()
+                    return True
+        return False
+    
+    def obtener_aristas_activas(self, origen):
+        """Devuelve las aristas activas desde el aeropuerto de origen."""
+        vertice_origen = self.obtener_vertice(origen)
+        if vertice_origen:
+            return [arista for arista in vertice_origen.adyacencias if arista.esta_activa()]
+        return []
 
     def __str__(self):
         return f"Grafo con {len(self.vertices)} aeropuertos"
