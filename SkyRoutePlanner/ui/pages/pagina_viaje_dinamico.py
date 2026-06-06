@@ -169,6 +169,8 @@ class PaginaViajeDinamico(QtWidgets.QWidget):
 
         activity_buttons = QHBoxLayout()
         self.do_activity_button = QPushButton("Realizar actividad")
+        self.do_activity_button.setObjectName("primaryButton")
+        self.do_activity_button.setCursor(QtCore.Qt.CursorShape.PointingHandCursor)
         self.do_activity_button.clicked.connect(self.on_do_activity)
         activity_buttons.addWidget(self.do_activity_button)
 
@@ -197,6 +199,8 @@ class PaginaViajeDinamico(QtWidgets.QWidget):
 
         job_buttons = QHBoxLayout()
         self.accept_job_button = QPushButton("Aceptar trabajo")
+        self.accept_job_button.setObjectName("primaryButton")
+        self.accept_job_button.setCursor(QtCore.Qt.CursorShape.PointingHandCursor)
         self.accept_job_button.clicked.connect(self.on_accept_job)
         job_buttons.addWidget(self.accept_job_button)
 
@@ -621,11 +625,51 @@ class PaginaViajeDinamico(QtWidgets.QWidget):
     def _refresh_action_buttons(self):
         has_gestor = self.gestor is not None
         en_aeropuerto = has_gestor and self.gestor.estado_movimiento == "en_aeropuerto"
-        activity_selected = en_aeropuerto and 0 <= self._selected_activity_row() < len(self.actividades_actuales)
-        job_selected = en_aeropuerto and 0 <= self._selected_job_row() < len(self.trabajos_actuales)
-        self.do_activity_button.setEnabled(activity_selected)
-        self.accept_job_button.setEnabled(job_selected)
-        self.work_hours_spin.setEnabled(job_selected)
+        activity_row = self._selected_activity_row()
+        job_row = self._selected_job_row()
+        activity_selected = en_aeropuerto and 0 <= activity_row < len(self.actividades_actuales)
+        job_selected = en_aeropuerto and 0 <= job_row < len(self.trabajos_actuales)
+        activity_available = activity_selected and not self._actividad_realizada(self.actividades_actuales[activity_row])
+        job_available = job_selected and not self._trabajo_realizado(self.trabajos_actuales[job_row])
+        self.do_activity_button.setEnabled(activity_available)
+        self.accept_job_button.setEnabled(job_available)
+        self.work_hours_spin.setEnabled(job_available)
+
+    def _normalizar_texto_registro(self, valor):
+        return str(valor or "").strip().lower()
+
+    def _normalizar_numero_registro(self, valor):
+        return float(valor or 0)
+
+    def _actividad_realizada(self, actividad):
+        if not self.gestor or not actividad:
+            return False
+        aeropuerto_actual = self._normalizar_texto_registro(self.gestor.obtener_estado().get("aeropuerto_actual"))
+        nombre = self._normalizar_texto_registro(getattr(actividad, "nombre", ""))
+        costo = self._normalizar_numero_registro(getattr(actividad, "costo_usd", 0))
+        tiempo_horas = self._normalizar_numero_registro(getattr(actividad, "duracion_horas", 0))
+        return any(
+            self._normalizar_texto_registro(registro.get("nombre")) == nombre
+            and self._normalizar_texto_registro(registro.get("aeropuerto")) == aeropuerto_actual
+            and self._normalizar_numero_registro(registro.get("costo")) == costo
+            and self._normalizar_numero_registro(registro.get("tiempo_horas")) == tiempo_horas
+            for registro in self.gestor.viajero.actividades_realizadas
+        )
+
+    def _trabajo_realizado(self, trabajo):
+        if not self.gestor or not trabajo:
+            return False
+        aeropuerto_actual = self._normalizar_texto_registro(self.gestor.obtener_estado().get("aeropuerto_actual"))
+        descripcion = self._normalizar_texto_registro(getattr(trabajo, "nombre", ""))
+        tarifa_hora = self._normalizar_numero_registro(getattr(trabajo, "tarifa_hora", 0))
+        max_horas = self._normalizar_numero_registro(getattr(trabajo, "max_horas", 0))
+        return any(
+            self._normalizar_texto_registro(registro.get("descripcion")) == descripcion
+            and self._normalizar_texto_registro(registro.get("aeropuerto")) == aeropuerto_actual
+            and self._normalizar_numero_registro(registro.get("tarifa_hora")) == tarifa_hora
+            and self._normalizar_numero_registro(registro.get("max_horas")) == max_horas
+            for registro in self.gestor.viajero.trabajos_realizados
+        )
 
     def _refresh_job_hours_limit(self):
         row = self._selected_job_row()
@@ -653,12 +697,16 @@ class PaginaViajeDinamico(QtWidgets.QWidget):
         row = self._selected_activity_row()
         if row < 0 or row >= len(self.actividades_actuales):
             return
+        if self._actividad_realizada(self.actividades_actuales[row]):
+            self._refresh_action_buttons()
+            return
         try:
             self.gestor.realizar_actividad(self.actividades_actuales[row])
         except ValueError as exc:
             QMessageBox.warning(self, "No se puede realizar actividad", str(exc))
+            self._refresh_action_buttons()
             return
-        self._refresh_dynamic_view()
+        self._refresh_after_action()
 
     def on_accept_job(self):
         if not self.gestor:
@@ -666,12 +714,22 @@ class PaginaViajeDinamico(QtWidgets.QWidget):
         row = self._selected_job_row()
         if row < 0 or row >= len(self.trabajos_actuales):
             return
+        if self._trabajo_realizado(self.trabajos_actuales[row]):
+            self._refresh_action_buttons()
+            return
         try:
             self.gestor.realizar_trabajo(self.trabajos_actuales[row], self.work_hours_spin.value())
         except ValueError as exc:
             QMessageBox.warning(self, "No se puede aceptar trabajo", str(exc))
+            self._refresh_action_buttons()
             return
-        self._refresh_dynamic_view()
+        self._refresh_after_action()
+
+    def _refresh_after_action(self):
+        self._refresh_status()
+        self._refresh_alternatives()
+        self._refresh_action_controls()
+        self._refresh_decision_log()
 
     def _refresh_decision_log(self):
         if not self.gestor:

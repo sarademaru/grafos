@@ -83,6 +83,38 @@ class GestorViaje:
             "max_horas": trabajo.max_horas,
         }
 
+    def _normalizar_texto_registro(self, valor: Any) -> str:
+        return str(valor or "").strip().lower()
+
+    def _normalizar_numero_registro(self, valor: Any) -> float:
+        return float(valor or 0)
+
+    def _actividad_ya_realizada(self, actividad_dict: Dict[str, Any], aeropuerto_actual: str) -> bool:
+        nombre = self._normalizar_texto_registro(actividad_dict.get("nombre"))
+        aeropuerto = self._normalizar_texto_registro(aeropuerto_actual)
+        costo = self._normalizar_numero_registro(actividad_dict.get("costo"))
+        tiempo_horas = self._normalizar_numero_registro(actividad_dict.get("tiempo_horas"))
+        return any(
+            self._normalizar_texto_registro(registro.get("nombre")) == nombre
+            and self._normalizar_texto_registro(registro.get("aeropuerto")) == aeropuerto
+            and self._normalizar_numero_registro(registro.get("costo")) == costo
+            and self._normalizar_numero_registro(registro.get("tiempo_horas")) == tiempo_horas
+            for registro in self.viajero.actividades_realizadas
+        )
+
+    def _trabajo_ya_realizado(self, trabajo_dict: Dict[str, Any], aeropuerto_actual: str) -> bool:
+        descripcion = self._normalizar_texto_registro(trabajo_dict.get("descripcion"))
+        aeropuerto = self._normalizar_texto_registro(aeropuerto_actual)
+        tarifa_hora = self._normalizar_numero_registro(trabajo_dict.get("tarifa_hora"))
+        max_horas = self._normalizar_numero_registro(trabajo_dict.get("max_horas"))
+        return any(
+            self._normalizar_texto_registro(registro.get("descripcion")) == descripcion
+            and self._normalizar_texto_registro(registro.get("aeropuerto")) == aeropuerto
+            and self._normalizar_numero_registro(registro.get("tarifa_hora")) == tarifa_hora
+            and self._normalizar_numero_registro(registro.get("max_horas")) == max_horas
+            for registro in self.viajero.trabajos_realizados
+        )
+
     def realizar_actividad(self, actividad: Any) -> Dict[str, Any]:
         """Realiza una actividad: acepta `Actividad` o diccionario compatible.
 
@@ -98,6 +130,8 @@ class GestorViaje:
         tiempo_actividad = float(actividad_dict.get("tiempo_horas", 0) or 0)
         costo_actividad = float(actividad_dict.get("costo", 0) or 0)
         aeropuerto_actual = self._obtener_codigo_actual()
+        if self._actividad_ya_realizada(actividad_dict, aeropuerto_actual):
+            raise ValueError("La actividad ya fue realizada en este aeropuerto")
         actividad_dict.setdefault("aeropuerto", aeropuerto_actual)
         actividad_dict.setdefault("instante_simulacion", self.tiempo_transcurrido_horas)
 
@@ -156,6 +190,8 @@ class GestorViaje:
         if max_horas is not None and horas_trabajadas > float(max_horas):
             raise ValueError(f"No se pueden trabajar {horas_trabajadas:g} horas: maximo {float(max_horas):g}")
         aeropuerto_actual = self._obtener_codigo_actual()
+        if self._trabajo_ya_realizado(trabajo_dict, aeropuerto_actual):
+            raise ValueError("El trabajo ya fue realizado en este aeropuerto")
         trabajo_dict.setdefault("aeropuerto", aeropuerto_actual)
         trabajo_dict.setdefault("instante_simulacion", self.tiempo_transcurrido_horas)
 
