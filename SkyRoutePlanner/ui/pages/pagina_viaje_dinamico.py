@@ -153,7 +153,9 @@ class PaginaViajeDinamico(QtWidgets.QWidget):
         self._add_status_row(3, "Visitados", self.status_labels["visitados"])
         self._add_status_row(4, "Alimentacion", self.status_labels["alimentacion"])
         self._add_status_row(5, "Hospedaje", self.status_labels["hospedaje"])
-
+        
+        activities_title = QLabel("Actividades")
+        activities_title.setObjectName("sectionTitle")
         self.activity_table = QTableWidget(0, 3)
         self.activity_table.setObjectName("routeResults")
         self.activity_table.setHorizontalHeaderLabels(["Actividad", "Duracion", "Costo"])
@@ -174,6 +176,8 @@ class PaginaViajeDinamico(QtWidgets.QWidget):
         self.do_activity_button.clicked.connect(self.on_do_activity)
         activity_buttons.addWidget(self.do_activity_button)
 
+        job_title = QLabel("Trabajos disponibles")
+        job_title.setObjectName("sectionTitle")
         self.job_table = QTableWidget(0, 3)
         self.job_table.setObjectName("routeResults")
         self.job_table.setHorizontalHeaderLabels(["Trabajo", "Tarifa", "Max"])
@@ -224,10 +228,10 @@ class PaginaViajeDinamico(QtWidgets.QWidget):
         control_layout.addWidget(routes_title)
         control_layout.addWidget(self.routes_table)
         control_layout.addWidget(self.block_route_button)
-        control_layout.addWidget(QLabel("Actividades"))
+        control_layout.addWidget(activities_title)
         control_layout.addWidget(self.activity_table)
         control_layout.addLayout(activity_buttons)
-        control_layout.addWidget(QLabel("Trabajos"))
+        control_layout.addWidget(job_title)
         control_layout.addWidget(self.job_table)
         control_layout.addLayout(job_form)
         control_layout.addLayout(job_buttons)

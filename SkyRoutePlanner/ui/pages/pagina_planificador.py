@@ -154,8 +154,8 @@ class PaginaPlanificador(QtWidgets.QWidget):
         legend_layout = QVBoxLayout(legend)
         legend_layout.setContentsMargins(0, 0, 0, 0)
         legend_layout.setSpacing(8)
-        legend_layout.addWidget(QLabel("Hub"))
-        legend_layout.addWidget(QLabel("Aeropuerto Secundario"))
+        legend_layout.addWidget(QLabel("🟠 Hub"))
+        legend_layout.addWidget(QLabel("🔵 Aeropuerto Secundario"))
 
         info_box = QFrame()
         info_box.setObjectName("infoFrame")
