@@ -96,17 +96,23 @@ class PaginaReportes(QtWidgets.QWidget):
         ]
         layout.addLayout(self._details_grid(rows))
 
+        # Use basic plan alternatives; if missing, fallback to primary_route provided by planner
+        primary_route = self.planificacion.get("primary_route") if self.planificacion else None
+
+        alt_a = self._get_basic_route("max_destinations_by_budget") or primary_route
+        alt_b = self._get_basic_route("max_destinations_by_time") or primary_route
+
         layout.addWidget(
             self._route_summary_box(
                 "Alternativa A",
-                self._get_basic_route("max_destinations_by_budget"),
+                alt_a,
                 "No existe una ruta factible que llegue al destino, respete el presupuesto y use los transportes requeridos.",
             )
         )
         layout.addWidget(
             self._route_summary_box(
                 "Alternativa B",
-                self._get_basic_route("max_destinations_by_time"),
+                alt_b,
                 "No existe una ruta factible que llegue al destino, respete el tiempo disponible y use los transportes requeridos.",
             )
         )

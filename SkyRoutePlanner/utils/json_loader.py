@@ -15,7 +15,8 @@ def _get_value(dct, keys, default=None):
 
 
 def _normalize_aeronaves_config(aeronaves_config):
-    normalized = dict(DEFAULT_AERONAVES)
+    # Do not merge with DEFAULT_AERONAVES here; return only provided types
+    normalized = {}
     if not isinstance(aeronaves_config, dict):
         return normalized
 
