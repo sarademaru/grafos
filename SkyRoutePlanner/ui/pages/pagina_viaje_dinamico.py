@@ -42,18 +42,23 @@ class PaginaViajeDinamico(QtWidgets.QWidget):
         self.flight_timer.timeout.connect(self._on_flight_timer_tick)
         self._setup_ui()
 
+    """Auxiliary method to format a value as a monetary amount. This method takes a value, converts it to a float, and formats it as a string with a dollar sign and two decimal places. If the value is None or cannot be converted to a float, it defaults to 0.00. This method is used to consistently display monetary values in the report sections."""
     def _money(self, value):
         return f"${float(value or 0):.2f}"
 
+    """Auxiliary method to format a value as a duration in hours. This method takes a value, converts it to a float, and formats it as a string with two decimal places followed by "h". If the value is None or cannot be converted to a float, it defaults to 0.00 h. This method is used to consistently display time durations in the report sections."""
     def _hours(self, value):
         return f"{float(value or 0):.2f} h"
 
+    """Auxiliary method to format a value as a distance in kilometers. This method takes a value, converts it to a float, and formats it as a string with two decimal places followed by "km". If the value is None or cannot be converted to a float, it defaults to 0.00 km. This method is used to consistently display distance values in the report sections."""
     def _km(self, value):
         return f"{float(value or 0):.0f} km"
 
+    """Auxiliary method to display a warning message box with a specified title and message. This method uses the QMessageBox class to create and show a warning dialog, allowing the user to acknowledge important information or issues that arise during the simulation."""
     def _show_warning(self, title, message):
         QMessageBox.warning(self, title, message)
 
+    """Auxiliary method to format a message for when a route is blocked. This method takes an alternative route information dictionary and constructs a user-friendly message explaining why the route is blocked, including details about the origin, destination, distance, subsidy limits, and budget constraints. The message is tailored based on the specific reason for the blockage, such as returning to the initial origin or exceeding subsidy limits."""
     def _format_route_block_message(self, alternativa):
         if alternativa.get("bloqueada_por_origen_inicial", False):
             origen = alternativa.get("destino", "origen")
@@ -88,6 +93,7 @@ class PaginaViajeDinamico(QtWidgets.QWidget):
             f"pero solo dispone de {self._money(presupuesto)}."
         )
 
+    """Auxiliary method to format a message for when a route is not available. This method takes a message and an alternative route information dictionary, and constructs a user-friendly message explaining why the route is not available, including details about the origin, destination, and any relevant constraints."""
     def _format_route_exception_message(self, message, alternativa=None):
         if "No existe ruta directa" in message and alternativa:
             origen = alternativa.get("origen", "-")
@@ -103,6 +109,7 @@ class PaginaViajeDinamico(QtWidgets.QWidget):
 
         return self._format_resource_exception_message(message)
 
+    """Auxiliary method to format a message for resource-related exceptions. This method takes an exception message and uses regular expressions to identify specific patterns related to spending, time consumption, activity budgets, and work hours. It then constructs user-friendly messages based on the identified patterns, providing clear explanations of the issues and the required versus available resources."""
     def _format_resource_exception_message(self, message):
         spend_match = re.search(
             r"Cannot spend ([0-9]+(?:\.[0-9]+)?): only ([0-9]+(?:\.[0-9]+)?) available",
@@ -172,6 +179,7 @@ class PaginaViajeDinamico(QtWidgets.QWidget):
 
         return message
 
+    """Auxiliary method to build a status value label. This method creates and returns a QLabel widget with a specific object name for styling. The label is intended to display the value of a particular status item in the simulation, such as the current airport, remaining budget, or time left."""
     def _setup_ui(self):
         layout = QVBoxLayout(self)
         layout.setContentsMargins(24, 24, 24, 24)
@@ -382,24 +390,29 @@ class PaginaViajeDinamico(QtWidgets.QWidget):
         content_layout.addWidget(self.graph_view, 5)
         layout.addLayout(content_layout, stretch=1)
 
+    """Auxiliary method to add a status row to the status grid layout. This method takes a row index, a title for the status item, and a value widget (such as a QLabel) to display the value of the status item. It creates a title label with specific styling and adds both the title and value widgets to the grid layout at the specified row."""
     def _build_status_value(self, text):
         label = QLabel(text)
         label.setObjectName("infoValue")
         label.setWordWrap(True)
         return label
-
+    
+    """Auxiliary method to add a status row to the status grid layout. This method takes a row index, a title for the status item, and a value widget (such as a QLabel) to display the value of the status item. It creates a title label with specific styling and adds both the title and value widgets to the grid layout at the specified row."""
     def _add_status_row(self, row, title, value_widget):
         title_label = QLabel(title)
         title_label.setObjectName("infoLabel")
         self.status_grid.addWidget(title_label, row, 0)
         self.status_grid.addWidget(value_widget, row, 1)
 
+
+    """Auxiliary method to refresh the state of action buttons based on the current selection and simulation state. This method checks the selected activity and job, as well as the current state of the gestor, to determine whether the "Realizar actividad" and "Aceptar trabajo" buttons should be enabled or disabled. It ensures that the user can only perform valid actions based on the current context of the simulation."""
     def set_graph(self, grafo):
         self.grafo = grafo
         self.graph_view.set_graph(grafo)
         self._refresh_airports()
         self._reset_simulation_view()
 
+    """Auxiliary method to clear the current graph and reset the simulation state. This method stops any ongoing flight timers, clears the graph and gestor references, resets the graph view, clears the origin selection, and resets all simulation-related views and data to their initial states. It ensures that the user can start fresh with a new graph or configuration."""
     def clear_graph(self):
         self.flight_timer.stop()
         self.grafo = None
@@ -408,11 +421,13 @@ class PaginaViajeDinamico(QtWidgets.QWidget):
         self.origin_combo.clear()
         self._reset_simulation_view()
 
+    """Auxiliary method to refresh the list of available airports in the origin selection combo box. This method clears the current items in the combo box and repopulates it with the identifiers of the vertices from the graph, allowing the user to select a valid starting point for the dynamic travel simulation."""
     def _refresh_airports(self):
         self.origin_combo.clear()
         if self.grafo:
             self.origin_combo.addItems([vertice.identificador for vertice in self.grafo.obtener_vertices()])
 
+    """Auxiliary method to reset the simulation view to its initial state. This method clears all simulation data, stops any ongoing timers, and resets the graph view and tables."""
     def _reset_simulation_view(self):
         self.alternativas = []
         self.sin_destinos_eficientes = False
@@ -433,6 +448,7 @@ class PaginaViajeDinamico(QtWidgets.QWidget):
         self._refresh_action_buttons()
         self.decision_log.setPlainText("Aun no hay decisiones registradas.")
 
+    """Auxiliary method to handle the start of the dynamic travel simulation. This method validates that a graph is loaded and an origin airport is selected, then initializes the GestorViaje with the provided graph and traveler information. It also resets the flight timer and updates the graph view to reflect the starting point of the simulation."""
     def on_start_trip(self):
         if not self.grafo:
             self._show_warning("Validacion", "Carga un grafo antes de iniciar el viaje dinamico.")
@@ -454,6 +470,7 @@ class PaginaViajeDinamico(QtWidgets.QWidget):
         self.graph_view.highlight_route([origen])
         self._refresh_dynamic_view()
 
+    """Auxiliary method to handle advancing to the selected destination. This method checks if the gestor is in a valid state to advance, retrieves the selected alternative route, and attempts to advance to the destination using the gestor. It also handles any exceptions that may arise during the advancement process, providing user-friendly messages and updating the graph view accordingly."""
     def on_advance_selected(self):
         if not self.gestor:
             return
@@ -487,19 +504,23 @@ class PaginaViajeDinamico(QtWidgets.QWidget):
             self.flight_timer.start()
         self._refresh_dynamic_view()
 
+    """Auxiliary method to handle changes in the selection of alternative routes. This method retrieves the currently selected row in the alternatives table and updates the enabled state of the advance button based on whether the selected alternative can be advanced to, ensuring that the user can only attempt to advance to valid destinations."""
     def on_alternative_table_selection_changed(self):
         index = self._selected_table_row()
         self.advance_button.setEnabled(self._can_advance_from_index(index))
 
+    """Auxiliary method to retrieve the index of the currently selected row in the alternatives table. This method checks the selection model of the table and returns the row index of the first selected item, or -1 if no row is selected. This index is used to determine which alternative route the user has selected for potential advancement."""
     def _selected_table_row(self):
         selected = self.alternatives_table.selectionModel().selectedRows()
         if not selected:
             return -1
         return selected[0].row()
 
+    """Auxiliary method to determine if the user can advance to the destination corresponding to the given index in the alternatives list. This method checks if the gestor is currently in flight, and if not, it verifies that the index is within bounds and that the alternative at that index can be paid for, returning True if advancement is possible and False otherwise."""
     def _selected_alternative_index(self):
         return self._selected_table_row()
 
+    """Auxiliary method to determine if the user can advance to the destination corresponding to the given index in the alternatives list. This method checks if the gestor is currently in flight, and if not, it verifies that the index is within bounds and that the alternative at that index can be paid for, returning True if advancement is possible and False otherwise."""
     def _can_advance_from_index(self, index):
         if self.gestor and self.gestor.estado_movimiento == "en_vuelo":
             return False
@@ -507,6 +528,7 @@ class PaginaViajeDinamico(QtWidgets.QWidget):
             return False
         return bool(self.alternativas[index].get("puede_pagarse", True))
 
+    """Auxiliary method to handle the flight timer tick event. This method is called periodically while a flight is in progress, and it updates the flight progress on the graph view based on the current state of the gestor. It also checks for any exceptions that may occur during the flight advancement and handles them appropriately, including stopping the timer and showing warning messages if necessary."""
     def _on_flight_timer_tick(self):
         if not self.gestor or self.gestor.estado_movimiento != "en_vuelo" or not self.gestor.vuelo_actual:
             self.flight_timer.stop()
@@ -549,12 +571,14 @@ class PaginaViajeDinamico(QtWidgets.QWidget):
                 self._format_resource_exception_message(resultado.get("motivo", "Vuelo cancelado")),
             )
 
+    """Auxiliary method to find the index of the first alternative route that can be paid for. This method iterates through the list of alternatives and returns the index of the first one that has the "puede_pagarse" flag set to True. If no such alternative is found, it returns -1, indicating that there are no payable alternatives available."""
     def _first_payable_alternative_index(self):
         for index, alternativa in enumerate(self.alternativas):
             if alternativa.get("puede_pagarse", True):
                 return index
         return -1
 
+    """Auxiliary method to retrieve the initial origin of the journey. This method checks the current state of the gestor and returns the code of the first airport in the current route, or None if no route is available."""
     def _obtener_origen_inicial(self):
         if not self.gestor:
             return None
@@ -565,6 +589,7 @@ class PaginaViajeDinamico(QtWidgets.QWidget):
             return None
         return str(ruta[0]).upper().strip()
 
+    """Auxiliary method to apply the rule of preventing return to the initial origin. This method checks the current alternatives and marks those that would return to the initial origin as not payable, while also determining if there are any efficient destinations available. It updates the state of the alternatives accordingly and sets a flag if there are no efficient destinations left."""
     def _aplicar_regla_regreso_origen(self):
         self.sin_destinos_eficientes = False
         origen_inicial = self._obtener_origen_inicial()
@@ -595,6 +620,7 @@ class PaginaViajeDinamico(QtWidgets.QWidget):
 
         self.sin_destinos_eficientes = solo_regreso_al_origen
 
+    """Auxiliary method to suggest an alternative route for the user. This method checks the current alternatives and the airports that have already been visited by the traveler, and it prioritizes suggesting routes to new destinations that can be paid for. If no such routes are available, it falls back to suggesting any payable route, even if it leads to a previously visited airport. It returns the suggested alternative or None if no alternatives are available."""
     def _sugerir_alternativa_ui(self):
         visitados = set()
         if self.gestor:
@@ -616,6 +642,7 @@ class PaginaViajeDinamico(QtWidgets.QWidget):
         ]
         return pagables[0] if pagables else None
 
+    """Auxiliary method to refresh all dynamic views related to the current state of the simulation. This method calls individual refresh methods for the status, alternatives, routes panel, action controls, and decision log, ensuring that all displayed information is up-to-date with the current state of the gestor and the travel simulation."""
     def _refresh_dynamic_view(self):
         self._refresh_status()
         self._refresh_alternatives()
@@ -623,6 +650,7 @@ class PaginaViajeDinamico(QtWidgets.QWidget):
         self._refresh_action_controls()
         self._refresh_decision_log()
 
+    """Auxiliary method to refresh the status display based on the current state of the gestor. This method retrieves the current state, including the traveler information and current flight status, and updates the corresponding labels in the UI to reflect the current airport, remaining budget, time left, visited airports count, and time since last alimentation and lodging."""
     def _refresh_status(self):
         if not self.gestor:
             return
@@ -647,6 +675,7 @@ class PaginaViajeDinamico(QtWidgets.QWidget):
             f"{estado['horas_desde_ultimo_hospedaje']:.2f} / 20 h"
         )
 
+    """Auxiliary method to refresh the alternatives table and related information. This method retrieves the available alternatives from the gestor, applies the rule to prevent returning to the initial origin, updates the subsidy summary, and refreshes the alternatives table with the current data. It also updates the suggested alternative label based on the current alternatives and their payability."""
     def _refresh_alternatives(self):
         self.alternativas = []
         self.advance_button.setEnabled(False)
@@ -679,6 +708,7 @@ class PaginaViajeDinamico(QtWidgets.QWidget):
 
         self._refresh_alternatives_table()
 
+    """Auxiliary method to refresh the subsidy summary display based on the current state of the gestor. This method retrieves the subsidized distance used and total distance flown from the current state, calculates the allowed subsidized distance, and updates the subsidy label with this information. It also applies color coding to the label based on how much of the subsidy has been used, providing a visual indication of the subsidy usage."""
     def _refresh_subsidy_summary(self):
         if not self.gestor:
             return
@@ -700,6 +730,7 @@ class PaginaViajeDinamico(QtWidgets.QWidget):
         else:
             self.subsidy_label.setStyleSheet("")
 
+    """Auxiliary method to refresh the alternatives table with the current list of alternatives. This method populates the table with the destination, transport, distance, cost, time, and subsidy information for each alternative. It also applies styling to indicate which alternatives are subsidized, which are not payable, and highlights the best options based on cost and time. Finally, it selects the first payable alternative if available and enables the advance button accordingly."""
     def _refresh_alternatives_table(self):
         self.alternatives_table.setRowCount(len(self.alternativas))
         if not self.alternativas:
@@ -756,21 +787,25 @@ class PaginaViajeDinamico(QtWidgets.QWidget):
             self.alternatives_table.clearSelection()
             self.advance_button.setEnabled(False)
 
+    """Auxiliary method to format a message for blocked routes based on the given alternative. This method checks the properties of the alternative to determine the reason why it cannot be paid for, such as being blocked due to returning to the initial origin or being unaffordable, and returns an appropriate message to explain the situation to the user."""
     def _paint_table_cell(self, row, column, color):
         item = self.alternatives_table.item(row, column)
         if item:
             item.setBackground(QtGui.QBrush(QtGui.QColor(color)))
 
+    """Auxiliary method to format a message for blocked routes based on the given alternative. This method checks the properties of the alternative to determine the reason why it cannot be paid for, such as being blocked due to returning to the initial origin or being unaffordable, and returns an appropriate message to explain the situation to the user."""
     def _paint_table_row(self, row, color):
         for column in range(self.alternatives_table.columnCount()):
             self._paint_table_cell(row, column, color)
-
+    
+    """Auxiliary method to format a message for blocked routes based on the given alternative. This method checks the properties of the alternative to determine the reason why it cannot be paid for, such as being blocked due to returning to the initial origin or being unaffordable, and returns an appropriate message to explain the situation to the user."""
     def _paint_routes_table_row(self, row, color):
         for column in range(self.routes_table.columnCount()):
             item = self.routes_table.item(row, column)
             if item:
                 item.setBackground(QtGui.QBrush(QtGui.QColor(color)))
 
+    """Auxiliary method to format a message for blocked routes based on the given alternative. This method checks the properties of the alternative to determine the reason why it cannot be paid for, such as being blocked due to returning to the initial origin or being unaffordable, and returns an appropriate message to explain the situation to the user."""
     def _refresh_action_controls(self):
         self.actividades_actuales = []
         self.trabajos_actuales = []
@@ -822,6 +857,8 @@ class PaginaViajeDinamico(QtWidgets.QWidget):
         self._refresh_job_hours_limit()
         self._refresh_action_buttons()
 
+
+    """Auxiliary method to set the values of a table row based on the given list of values. This method iterates through the values and creates a QTableWidgetItem for each one, setting the text alignment to center and adding it to the specified row and column in the table. After populating the row, it resizes the rows to fit the contents."""
     def _set_table_row(self, table, row, values):
         for column, value in enumerate(values):
             item = QTableWidgetItem(str(value))
@@ -829,6 +866,8 @@ class PaginaViajeDinamico(QtWidgets.QWidget):
             table.setItem(row, column, item)
         table.resizeRowsToContents()
 
+
+    """Auxiliary method to set a message in a table when there are no records to display. This method clears any existing spans in the table, sets the row count to 1, and creates a span across all columns to display the provided message. It also centers the text within the cell for better presentation."""
     def _set_empty_table_message(self, table, columns, message):
         table.clearSpans()
         table.setRowCount(1)
@@ -837,6 +876,7 @@ class PaginaViajeDinamico(QtWidgets.QWidget):
         item.setTextAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
         table.setItem(0, 0, item)
 
+    """Auxiliary method to refresh the enabled state of action buttons based on the current selection and simulation state. This method checks the selected activity and job, as well as the current state of the gestor, to determine whether the "Realizar actividad" and "Aceptar trabajo" buttons should be enabled or disabled. It ensures that the user can only perform valid actions based on the current context of the simulation."""
     def _refresh_action_buttons(self):
         has_gestor = self.gestor is not None
         en_aeropuerto = has_gestor and self.gestor.estado_movimiento == "en_aeropuerto"
@@ -850,12 +890,16 @@ class PaginaViajeDinamico(QtWidgets.QWidget):
         self.accept_job_button.setEnabled(job_available)
         self.work_hours_spin.setEnabled(job_available)
 
+    """Auxiliary method to normalize text values from activity and job records for comparison purposes. This method takes a value, converts it to a string, and applies stripping and lowercasing to ensure consistent formatting when comparing against the records of performed activities and jobs. This helps in accurately determining whether a given activity or job has already been performed by the traveler."""
     def _normalizar_texto_registro(self, valor):
         return str(valor or "").strip().lower()
 
+
+    """Auxiliary method to normalize numeric values from activity and job records for comparison purposes. This method takes a value and converts it to a float, treating None or non-numeric values as 0. This ensures consistent formatting when comparing against the records of performed activities and jobs, allowing for accurate determination of whether a given activity or job has already been performed by the traveler."""
     def _normalizar_numero_registro(self, valor):
         return float(valor or 0)
 
+    """Auxiliary method to check if a given activity has already been performed by the traveler. This method retrieves the current airport from the gestor's state and compares the normalized name, cost, and duration of the activity against the records of performed activities in the gestor's traveler data. It returns True if a matching record is found, indicating that the activity has already been performed, and False otherwise."""
     def _actividad_realizada(self, actividad):
         if not self.gestor or not actividad:
             return False
@@ -871,6 +915,7 @@ class PaginaViajeDinamico(QtWidgets.QWidget):
             for registro in self.gestor.viajero.actividades_realizadas
         )
 
+    """Auxiliary method to check if a given job has already been performed by the traveler. This method retrieves the current airport from the gestor's state and compares the normalized description, hourly rate, and maximum hours of the job against the records of performed jobs in the gestor's traveler data. It returns True if a matching record is found, indicating that the job has already been performed, and False otherwise."""
     def _trabajo_realizado(self, trabajo):
         if not self.gestor or not trabajo:
             return False
@@ -885,7 +930,8 @@ class PaginaViajeDinamico(QtWidgets.QWidget):
             and self._normalizar_numero_registro(registro.get("max_horas")) == max_horas
             for registro in self.gestor.viajero.trabajos_realizados
         )
-
+    
+    """Auxiliary method to refresh the enabled state of the job hours spin box based on the currently selected job and its maximum hours. This method retrieves the selected job, checks if it is valid, and updates the maximum value of the spin box to match the maximum hours allowed for that job. It also ensures that the current value of the spin box does not exceed the new maximum, and then calls the method to refresh the action buttons to reflect any changes in availability."""
     def _refresh_job_hours_limit(self):
         row = self._selected_job_row()
         if 0 <= row < len(self.trabajos_actuales):
@@ -893,19 +939,20 @@ class PaginaViajeDinamico(QtWidgets.QWidget):
             self.work_hours_spin.setMaximum(max_horas)
             self.work_hours_spin.setValue(min(max_horas, max(0.25, self.work_hours_spin.value())))
         self._refresh_action_buttons()
-
+    """Auxiliary method to retrieve the index of the currently selected row in the activity table. This method checks the selection model of the activity table and returns the row index of the first selected item, or -1 if no row is selected. This index is used to determine which activity the user has selected for potential action."""
     def _selected_activity_row(self):
         selected = self.activity_table.selectionModel().selectedRows()
         if not selected:
             return -1
         return selected[0].row()
 
+    """Auxiliary method to retrieve the index of the currently selected row in the job table. This method checks the selection model of the job table and returns the row index of the first selected item, or -1 if no row is selected. This index is used to determine which job the user has selected for potential action."""
     def _selected_job_row(self):
         selected = self.job_table.selectionModel().selectedRows()
         if not selected:
             return -1
         return selected[0].row()
-
+    """Auxiliary method to handle the action of performing an activity. This method checks if the gestor is in a valid state and if an activity is selected, then it verifies if the selected activity has already been performed. If not, it attempts to perform the activity using the gestor and handles any exceptions that may arise, providing user-friendly messages and refreshing the view accordingly."""
     def on_do_activity(self):
         if not self.gestor:
             return
@@ -924,7 +971,7 @@ class PaginaViajeDinamico(QtWidgets.QWidget):
             )
             return
         self._refresh_after_action()
-
+    """Auxiliary method to handle the action of accepting a job. This method checks if the gestor is in a valid state and if a job is selected, then it verifies if the selected job has already been performed. If not, it attempts to perform the job using the gestor with the specified number of hours and handles any exceptions that may arise, providing user-friendly messages and refreshing the view accordingly."""
     def on_accept_job(self):
         if not self.gestor:
             return
@@ -943,13 +990,13 @@ class PaginaViajeDinamico(QtWidgets.QWidget):
             )
             return
         self._refresh_after_action()
-
+    """Auxiliary method to refresh the view after performing an action such as doing an activity or accepting a job. This method calls individual refresh methods for the status, alternatives, action controls, and decision log to ensure that all displayed information is up-to-date with the current state of the gestor and the travel simulation after the action has been performed."""
     def _refresh_after_action(self):
         self._refresh_status()
         self._refresh_alternatives()
         self._refresh_action_controls()
         self._refresh_decision_log()
-
+    """Auxiliary method to refresh the decision log display based on the current state of the gestor. This method retrieves the list of decisions made during the simulation and formats them into a readable format, displaying them in the decision log text area. It handles various types of decisions, such as flights, activities, jobs, and cancellations, providing a comprehensive log of the traveler's actions and events throughout the simulation."""
     def _refresh_decision_log(self):
         if not self.gestor:
             return
@@ -1004,6 +1051,7 @@ class PaginaViajeDinamico(QtWidgets.QWidget):
 
         self.decision_log.setPlainText("\n".join(lines))
 
+    """Auxiliary method to refresh the routes panel with the current state of the graph. This method retrieves the vertices and edges from the graph, populates the routes table with the origin, destination, and status of each route, and applies styling to indicate which routes are blocked. It ensures that the routes panel accurately reflects the current state of the graph and any changes that may have occurred due to user actions or events in the simulation."""
     def _refresh_routes_panel(self):
         self.routes_table.clearSpans()
         self.routes_table.setRowCount(0)
@@ -1024,7 +1072,7 @@ class PaginaViajeDinamico(QtWidgets.QWidget):
 
             if arista.esta_bloqueada():
                 self._paint_routes_table_row(row, "#dc2626")
-
+    """Auxiliary method to handle the action of blocking a route. This method checks if the gestor is in a valid state and if a route is selected, then it attempts to block the selected route using the gestor and handles any exceptions that may arise, providing user-friendly messages and refreshing the view accordingly. If the blocked route was part of an ongoing flight, it also handles the interruption of the flight and updates the relevant UI components."""
     def on_block_route(self):
         if not self.gestor:
             QMessageBox.warning(self, "Validacion", "Inicia un viaje antes de bloquear rutas.")

@@ -33,6 +33,7 @@ class NodoGrafico(QGraphicsEllipseItem):
         self._create_labels()
         self.setToolTip(self._build_tooltip())
 
+    """Auxiliary method to create and position the labels for the airport code and city name. This method constructs two QGraphicsTextItem instances, one for the airport code (identifier) and another for the city name (or airport name if city is not available). It sets their font, color, and positions them appropriately relative to the node to ensure they are clearly visible and do not overlap with the node itself."""
     def _create_labels(self):
         code_label = QGraphicsTextItem(self.vertice.identificador, self)
         code_label.setDefaultTextColor(QColor("#0f172a"))
@@ -49,6 +50,7 @@ class NodoGrafico(QGraphicsEllipseItem):
         city_rect = city_label.boundingRect()
         city_label.setPos(-city_rect.width() / 2, 6)
 
+    """Auxiliary method to build the tooltip text for the node. This method constructs a multi-line string containing information about the airport, including its code, name, city, country, and time zone."""
     def _build_tooltip(self):
         fields = [
             f"Código: {self.vertice.identificador}",
@@ -59,14 +61,17 @@ class NodoGrafico(QGraphicsEllipseItem):
         ]
         return "\n".join(fields)
 
+    """Event handler for when the mouse cursor enters the node area. This method reduces the opacity of the node to create a hover effect, making it visually distinct when the user hovers over it."""
     def hoverEnterEvent(self, event):
         self.setOpacity(0.85)
         super().hoverEnterEvent(event)
 
+    """Event handler for when the mouse cursor leaves the node area. This method restores the opacity of the node to its original state, removing the hover effect when the user moves the cursor away from the node."""
     def hoverLeaveEvent(self, event):
         self.setOpacity(1.0)
         super().hoverLeaveEvent(event)
 
+    """Event handler for when the node is clicked. This method emits a custom signal with the vertex information, allowing other components of the application to respond to the node selection, such as displaying detailed information about the airport or updating other parts of the UI based on the selected node."""
     def mousePressEvent(self, event):
         super().mousePressEvent(event)
         views = self.scene().views()
@@ -94,6 +99,7 @@ class AristaGrafica:
         self.label_background_item = None
         self.label_item = None
 
+    """Auxiliary method to add the edge to the scene. This method calculates the appropriate positions for the line, arrow, and label based on the positions of the source and target nodes. It creates a QGraphicsLineItem for the edge, a QGraphicsPolygonItem for the arrowhead, and a QGraphicsTextItem for the distance label, adding them to the scene with appropriate styling and z-ordering."""
     def add_to_scene(self, scene):
         start = self.source_item.scenePos()
         end = self.target_item.scenePos()
@@ -150,10 +156,12 @@ class AristaGrafica:
         scene.addItem(self.label_item)
         self.refresh_style()
 
+    """Auxiliary method to set the highlighted state of the edge. This method updates the internal highlighted flag and calls the refresh_style method to update the visual appearance of the edge based on whether it is highlighted or not. Highlighting can be used to visually distinguish edges that are part of a selected route or path in the graph."""
     def set_highlighted(self, highlighted):
         self.highlighted = highlighted
         self.refresh_style()
 
+    """Auxiliary method to refresh the visual style of the edge based on its current state. This method checks if the edge is blocked and updates the color, pen style, and opacity accordingly. It also updates the appearance of the arrow and label background to reflect the blocked state, providing a clear visual indication of whether the route is available or not."""
     def refresh_style(self):
         if not self.line_item:
             return
@@ -188,6 +196,7 @@ class AristaGrafica:
             self.label_item.setDefaultTextColor(label_color)
             self.label_item.setOpacity(0.7 if is_blocked else 1.0)
 
+    """Auxiliary method to build the arrow polygon for the directed edge. This method calculates the points for a triangular arrowhead based on the direction from the tail to the tip of the edge. It returns a QPolygonF representing the arrowhead, which can be added to the scene to visually indicate the direction of the edge."""
     def _build_arrow(self, tip, tail):
         direction = tail - tip
         length = sqrt(direction.x() ** 2 + direction.y() ** 2)
@@ -225,17 +234,19 @@ class GraphView(QGraphicsView):
         self.edge_items = []
         self.flight_marker = None
 
+    """Auxiliary method to set the graph data and trigger the drawing of the graph. This method takes a graph object as input, stores it in the instance variable, and calls the dibujar_grafo method to visualize the graph in the view. It allows the view to be updated with new graph data whenever necessary."""
     def set_graph(self, grafo):
         self.grafo = grafo
         self.dibujar_grafo(grafo)
 
+    """Auxiliary method to clear the current graph data from the view. This method resets the graph variable, clears all items from the scene, and resets the node and edge item collections, as well as the flight marker. It prepares the view for a new graph to be loaded or for a reset state."""
     def clear_graph(self):
         self.grafo = None
         self.scene.clear()
         self.node_items.clear()
         self.edge_items.clear()
         self.flight_marker = None
-
+    """Auxiliary method to draw the graph in the view. This method takes a graph object as input, calculates the positions for the vertices, creates graphical items for the nodes and edges, and adds them to the scene. It also sets the background color and adjusts the view to fit the entire graph. The method handles both small and large graphs, applying different layout strategies to ensure a clear visualization."""
     def dibujar_grafo(self, grafo):
         self.scene.clear()
         self.node_items.clear()
@@ -273,6 +284,7 @@ class GraphView(QGraphicsView):
         self.scene.setSceneRect(self.scene.itemsBoundingRect().adjusted(-80, -80, 80, 80))
         self._zoom_to_fit()
 
+    """Auxiliary method to calculate the positions of the vertices in the graph for visualization. This method uses a circular layout for small graphs and a hub-and-spoke layout for larger graphs, positioning hubs closer to the center and other vertices around them. It returns a dictionary mapping vertex identifiers to their calculated positions as QPointF objects."""
     def _calculate_positions(self, grafo):
         vertices = grafo.obtener_vertices()
         count = len(vertices)
@@ -315,12 +327,14 @@ class GraphView(QGraphicsView):
 
         return positions
 
+    """Auxiliary method to adjust the view to fit the entire graph. This method calculates the bounding rectangle of all items in the scene and adjusts the view to ensure that all nodes and edges are visible within the viewport, maintaining the aspect ratio. It is typically called after drawing the graph or when the view is resized to ensure an optimal display of the graph content."""
     def _zoom_to_fit(self):
         rect = self.scene.sceneRect()
         if rect.isNull():
             return
         self.fitInView(rect, Qt.AspectRatioMode.KeepAspectRatio)
 
+    """Event handler for mouse wheel events to implement zooming functionality. This method checks the direction of the wheel scroll and applies a scaling transformation to the view to zoom in or out accordingly. It allows users to easily zoom into specific areas of the graph for a closer look or zoom out for an overview of the entire graph."""
     def wheelEvent(self, event):
         zoom_in_factor = 1.25
         zoom_out_factor = 1 / zoom_in_factor
@@ -329,17 +343,18 @@ class GraphView(QGraphicsView):
             self.scale(zoom_in_factor, zoom_in_factor)
         else:
             self.scale(zoom_out_factor, zoom_out_factor)
-
+    """Event handler for resize events to adjust the view when the window size changes. This method calls the _zoom_to_fit method to ensure that the graph remains fully visible and properly scaled within the new window dimensions whenever the view is resized."""
     def resizeEvent(self, event):
         super().resizeEvent(event)
         if self.grafo:
             self._zoom_to_fit()
-
+    """Auxiliary method to refresh the visual state of the graph. This method iterates through all edge items and calls their refresh_style method to update their appearance based on their current state (e.g., blocked, highlighted). It then triggers a viewport update to ensure that all changes are rendered on the screen. This method can be called after changes to the graph data or edge states to ensure that the visualization remains accurate and up-to-date."""
     def refresh_graph_state(self):
         for edge in self.edge_items:
             edge.refresh_style()
         self.viewport().update()
 
+    """Auxiliary method to set the progress of a flight on the graph. This method updates the position of the flight marker along the specified route based on the progress value."""
     def set_flight_progress(self, origen, destino, progreso):
         edge = self._find_edge(origen, destino)
         if not edge or not edge.line_item:
@@ -363,17 +378,20 @@ class GraphView(QGraphicsView):
         self.flight_marker.setVisible(True)
         self.viewport().update()
 
+    """Auxiliary method to clear the flight progress marker from the graph. This method hides the flight marker and triggers a viewport update to remove it from the display. It is typically called when a flight is completed or when the progress needs to be reset for any reason."""
     def clear_flight_progress(self):
         if self.flight_marker:
             self.flight_marker.setVisible(False)
         self.viewport().update()
 
+    """Auxiliary method to find the edge item corresponding to a given origin and destination. This method iterates through the list of edge items and checks if any edge matches the specified origin and destination identifiers. If a matching edge is found, it is returned; otherwise, the method returns None. This is useful for updating the state of specific edges based on user interactions or changes in the graph data."""
     def _find_edge(self, origen, destino):
         for edge in self.edge_items:
             if edge.origin_id == origen and edge.destination_id == destino:
                 return edge
         return None
 
+    """Auxiliary method to retrieve the vertex object for a given identifier. This method checks if the specified identifier exists in the graph's vertices and returns the corresponding vertex object. If the identifier does not exist, it raises a ValueError indicating that the airport does not exist in the graph."""
     def highlight_route(self, path):
         route_edges = set()
         if path and len(path) > 1:

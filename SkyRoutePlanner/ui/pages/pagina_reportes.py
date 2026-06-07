@@ -10,7 +10,7 @@ from PyQt6.QtWidgets import (
 
 
 class PaginaReportes(QtWidgets.QWidget):
-    """Vista de consulta para datos ya generados por el planificador y el viaje."""
+    """Page for displaying reports."""
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -18,7 +18,7 @@ class PaginaReportes(QtWidgets.QWidget):
         self.viaje_dinamico = None
         self.alternativas_aeronaves = []
         self._setup_ui()
-
+    """Auxiliary method to initialize the user interface components of the reports page. This method sets up the layout, title, and scrollable content area for displaying various report sections such as route planning details, aircraft comparisons, visited destinations, flight legs, activities, jobs, free time, and overall statistics. It organizes the structure of the reports page and prepares it for dynamic content updates based on the provided report data."""
     def _setup_ui(self):
         layout = QtWidgets.QVBoxLayout(self)
         layout.setContentsMargins(24, 24, 24, 24)
@@ -42,25 +42,27 @@ class PaginaReportes(QtWidgets.QWidget):
 
         layout.addWidget(self.scroll, stretch=1)
         self.refresh_report()
-
+    """Clears the current report data and refreshes the displayed content to show an empty state. This method resets the planning report, dynamic travel state, and aircraft alternatives to their initial empty values, and then calls the refresh_report method to update the user interface accordingly. It is typically used when loading a new graph or resetting the current report data."""
     def clear_report(self):
         self.planificacion = None
         self.viaje_dinamico = None
         self.alternativas_aeronaves = []
         self.refresh_report()
 
+    """Sets the overall report data and refreshes the displayed content. This method is a convenience wrapper that calls the appropriate report setting methods based on the provided payload."""
     def set_report(self, payload):
         self.set_planning_report(payload)
 
+    """Sets the planning report data and refreshes the displayed content. This method updates the internal planning report attribute and triggers a UI refresh to display the new information."""
     def set_planning_report(self, payload):
         self.planificacion = payload
         self.refresh_report()
-
+    """Sets the dynamic travel report data and refreshes the displayed content. This method updates the internal dynamic travel state and aircraft alternatives attributes, then triggers a UI refresh to display the new information."""
     def set_dynamic_report(self, estado=None, alternativas=None):
         self.viaje_dinamico = estado
         self.alternativas_aeronaves = list(alternativas or [])
         self.refresh_report()
-
+    """Refreshes the displayed report content based on the current planning report, dynamic travel state, and aircraft alternatives. This method clears the existing content and rebuilds the report sections to reflect the latest data. It ensures that all displayed information is up-to-date and accurately represents the current state of the reports."""
     def refresh_report(self):
         self._clear_content()
         self.content_layout.addWidget(self._build_planning_group())
@@ -72,6 +74,7 @@ class PaginaReportes(QtWidgets.QWidget):
         self.content_layout.addWidget(self._build_free_time_group())
         self.content_layout.addWidget(self._build_statistics_group())
         self.content_layout.addStretch()
+    """Auxiliary method to clear the current content displayed in the reports page. This method removes all existing widgets from the content layout and deletes them to free up resources. It is typically called before rebuilding the report sections to ensure that the displayed information is current and relevant to the latest report data."""
 
     def _clear_content(self):
         while self.content_layout.count():
@@ -79,7 +82,7 @@ class PaginaReportes(QtWidgets.QWidget):
             widget = item.widget()
             if widget:
                 widget.deleteLater()
-
+    """Auxiliary method to build the planning report section of the reports page. This method creates a group box containing details about the route planning, including the origin, destination, budget, available time, selected criteria, and summaries of the calculated routes based on different criteria. It organizes the information in a structured layout and provides a clear overview of the planning results."""
     def _build_planning_group(self):
         group, layout = self._new_group("Planificación de Ruta")
 
@@ -119,6 +122,7 @@ class PaginaReportes(QtWidgets.QWidget):
         )
         return group
 
+    """Auxiliary method to build the aircraft comparison section of the reports page. This method creates a group box containing a table that compares different aircraft alternatives for the planned route, showing details such as destination, type of aircraft, distance, cost, time, and whether the flight is subsidized. It highlights the best options based on cost and time, and provides a clear overview of the available aircraft choices for the route."""
     def _build_aircraft_comparison_group(self):
         rows = [
             [
@@ -154,7 +158,7 @@ class PaginaReportes(QtWidgets.QWidget):
         group, layout = self._new_group("Comparación de Aeronaves")
         layout.addWidget(table)
         return group
-
+    """Auxiliary method to build the visited destinations section of the reports page. This method creates a group box containing a table that lists the airports visited during the planned route, showing the order of visits and the corresponding airport codes. It provides a clear overview of the travel path taken through the various destinations."""
     def _build_visited_destinations_group(self):
         group, layout = self._new_group("Destinos Visitados")
         viajero = (self.viaje_dinamico or {}).get("viajero", {})
@@ -173,6 +177,7 @@ class PaginaReportes(QtWidgets.QWidget):
         )
         return group
 
+    """Auxiliary method to build the flight legs section of the reports page. This method creates a group box containing a table that lists the flight segments of the planned route, showing details such as origin, destination, aircraft type, distance, time, and cost. It provides a clear overview of the travel path taken through the various destinations."""      
     def _build_flight_legs_group(self):
         decisiones = list((self.viaje_dinamico or {}).get("decisiones", []))
         rows = [
@@ -197,7 +202,7 @@ class PaginaReportes(QtWidgets.QWidget):
             )
         )
         return group
-
+    """Auxiliary method to build a new group box with a title and a vertical layout. This method creates a QGroupBox with the specified title and sets up a QVBoxLayout for its content. It returns both the group box and the layout, allowing for easy addition of widgets to the group box in other methods."""
     def _build_pending_group(self, title):
         group, layout = self._new_group(title)
         layout.addWidget(self._message("Pendiente de implementación."))
@@ -224,7 +229,7 @@ class PaginaReportes(QtWidgets.QWidget):
             )
         )
         return group
-
+    """Auxiliary method to build the jobs section of the reports page. This method creates a group box containing a table that lists the jobs performed during the planned route, showing details such as the airport where the job was done, a description of the job, hours worked, hourly rate, and total earnings. It provides a clear overview of the work activities undertaken during the travel."""
     def _build_jobs_group(self):
         trabajos = list((self.viaje_dinamico or {}).get("trabajos_realizados", []))
         rows = [
@@ -247,7 +252,7 @@ class PaginaReportes(QtWidgets.QWidget):
             )
         )
         return group
-
+    """Auxiliary method to build the free time section of the reports page. This method creates a group box containing a table that lists the registered free time during the planned route, showing details such as the airport where the free time was recorded and the duration of that free time. It provides a clear overview of the leisure periods available during the travel."""
     def _build_free_time_group(self):
         tiempos_libres = list((self.viaje_dinamico or {}).get("tiempo_libre_registrado", []))
         rows = [
@@ -267,7 +272,7 @@ class PaginaReportes(QtWidgets.QWidget):
             )
         )
         return group
-
+    """Auxiliary method to build the overall statistics section of the reports page. This method creates a group box containing a grid layout that displays various aggregated statistics about the planned route and the traveler's activities, such as total distance traveled, accumulated time and cost, number of flights, visited airports, subsidized distance used, total spent on activities, total earned from jobs, and initial and final budget. It provides a comprehensive overview of the travel experience based on the dynamic travel state."""
     def _build_statistics_group(self):
         estado = self.viaje_dinamico or {}
         viajero = estado.get("viajero", {})
@@ -305,7 +310,7 @@ class PaginaReportes(QtWidgets.QWidget):
         group, layout = self._new_group("Estadísticas")
         layout.addLayout(self._details_grid(rows))
         return group
-
+    """Auxiliary method to retrieve the basic route information for a given key from the planning report. This method checks the primary result for the specified key and, if not found or if it lacks route data, iterates through the criteria results to find a valid route. It returns the first valid route found or None if no valid route is available."""
     def _get_basic_route(self, key):
         result = self.planificacion.get("result", {}) if self.planificacion else {}
         basic = result.get("basic", {}) if isinstance(result, dict) else {}
@@ -322,12 +327,12 @@ class PaginaReportes(QtWidgets.QWidget):
                 return route
 
         return route
-
+    """Auxiliary method to check if a given route contains valid data. This method verifies that the route is a dictionary and that it has either legs or a path with more than one stop. It returns True if the route has valid data and False otherwise."""
     def _has_route_data(self, route):
         if not isinstance(route, dict):
             return False
         return bool(route.get("legs")) or len(route.get("path", [])) > 1
-
+    """Auxiliary method to build a summary box for a given route. This method creates a group box with the specified title and populates it with details about the route, such as the complete sequence of stops, intermediate stops, transports used, total distance, cost, and time. It also includes a table of the route legs if available. If the route does not contain valid data, it displays an appropriate message instead."""
     def _route_summary_box(self, title, route, empty_message="No hay una planificacion calculada."):
         box, layout = self._new_group(title)
         if not self._has_route_data(route):
@@ -352,7 +357,7 @@ class PaginaReportes(QtWidgets.QWidget):
             )
         )
         return box
-
+    """Auxiliary method to build the rows for the route legs table. This method iterates through the legs of the given route and extracts relevant information such as origin, destination, transport used, distance, cost, and time for each leg. It returns a list of rows that can be used to populate the legs table in the route summary box."""
     def _route_leg_rows(self, route):
         rows = []
         for leg in route.get("legs", []):
@@ -367,12 +372,12 @@ class PaginaReportes(QtWidgets.QWidget):
                 ]
             )
         return rows
-
+    """Auxiliary method to safely retrieve a value from a leg dictionary or object. This method checks if the leg is a dictionary and retrieves the value using the get method; otherwise, it uses getattr to access the attribute. It returns the retrieved value or a default value if the key or attribute is not found."""
     def _leg_value(self, leg, key, default=None):
         if isinstance(leg, dict):
             return leg.get(key, default)
         return getattr(leg, key, default)
-
+    """Auxiliary method to build a grid layout for displaying label-value pairs. This method takes a list of tuples containing labels and their corresponding values, creates QLabel widgets for each pair, and organizes them in a QGridLayout with appropriate spacing. The resulting layout can be used to display detailed information in a structured format within the report sections."""
     def _details_grid(self, rows):
         grid = QtWidgets.QGridLayout()
         grid.setHorizontalSpacing(18)
@@ -386,7 +391,7 @@ class PaginaReportes(QtWidgets.QWidget):
             grid.addWidget(label_widget, row, 0)
             grid.addWidget(value_widget, row, 1)
         return grid
-
+    """Auxiliary method to create a new group box with a specified title and a vertical layout. This method initializes a QGroupBox, sets its object name for styling, and creates a QVBoxLayout for its content. It configures the layout's margins and spacing to ensure proper formatting of the contained widgets. The method returns both the created group box and its associated layout for further use in building the report sections."""
     def _new_group(self, title):
         group = QGroupBox(title)
         group.setObjectName("reportGroup")
@@ -394,7 +399,7 @@ class PaginaReportes(QtWidgets.QWidget):
         layout.setContentsMargins(14, 18, 14, 14)
         layout.setSpacing(10)
         return group, layout
-
+    """Auxiliary method to create a new table widget with specified headers, rows, and an empty message. This method initializes a QTableWidget, sets its properties for editing and selection behavior, and populates it with the provided data. If no rows are provided, it displays a single cell spanning all columns with the given empty message. The method also configures the appearance of the table, such as alternating row colors and header resizing."""
     def _new_table(self, headers, rows, empty_message):
         row_count = len(rows) if rows else 1
         table = QTableWidget(row_count, len(headers))
@@ -421,26 +426,27 @@ class PaginaReportes(QtWidgets.QWidget):
         table.resizeRowsToContents()
         return table
 
+    """Auxiliary method to create a label widget with a specified text. This method initializes a QLabel, sets its object name for styling, and configures it to wrap text. The resulting label can be used to display information in the report sections."""
     def _message(self, text):
         label = QLabel(text)
         label.setObjectName("infoLabel")
         label.setWordWrap(True)
         return label
-
+    """Auxiliary method to set the background color of a specific cell in a table. This method retrieves the item at the specified row and column, and if it exists, it applies a background color using a QBrush with the given color. This can be used to highlight specific cells based on certain conditions or criteria.  """
     def _paint_cell(self, table, row, column, color):
         item = table.item(row, column)
         if item:
             item.setBackground(QtGui.QBrush(QtGui.QColor(color)))
-
+    """Auxiliary method to set the background color of an entire row in a table. This method iterates through all columns in the specified row and applies a background color to each cell using the _paint_cell method. This can be used to highlight an entire row based on certain conditions or criteria."""
     def _paint_row(self, table, row, color):
         for column in range(table.columnCount()):
             self._paint_cell(table, row, column, color)
-
+    """Auxiliary method to format a value as a monetary amount. This method takes a value, converts it to a float, and formats it as a string with a dollar sign and two decimal places. If the value is None or cannot be converted to a float, it defaults to 0.00. This method is used to consistently display monetary values in the report sections."""
     def _money(self, value):
         return f"${float(value or 0):.2f}"
-
+    """Auxiliary method to format a value as a duration in hours. This method takes a value, converts it to a float, and formats it as a string with two decimal places followed by "h". If the value is None or cannot be converted to a float, it defaults to 0.00 h. This method is used to consistently display time durations in the report sections."""
     def _hours(self, value):
         return f"{float(value or 0):.2f} h"
-
+    """Auxiliary method to format a value as a distance in kilometers. This method takes a value, converts it to a float, and formats it as a string with two decimal places followed by "km". If the value is None or cannot be converted to a float, it defaults to 0.00 km. This method is used to consistently display distance values in the report sections."""
     def _km(self, value):
         return f"{float(value or 0):.2f} km"

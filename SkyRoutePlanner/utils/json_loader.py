@@ -6,7 +6,14 @@ from models.grafo import DEFAULT_AERONAVES
 from models.actividad import Actividad
 from models.trabajo import Trabajo
 
-
+"""Module for loading graph data from JSON files. 
+This module provides functionality to read graph data 
+from a JSON file, supporting multiple schemas for defining 
+airports and routes. It includes helper functions to normalize 
+configuration data, create activity and job objects, and construct 
+the graph structure based on the provided JSON data. The main function, 
+cargar_json, takes a file path as input and returns a Grafo object populated 
+with the vertices and edges defined in the JSON file."""
 def _get_value(dct, keys, default=None):
     for k in keys:
         if k in dct:

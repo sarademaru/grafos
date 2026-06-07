@@ -11,7 +11,7 @@ DEFAULT_AERONAVES = {
 
 class Grafo:
     """
-    Grafo dirigido implementado mediante lista de adyacencia.
+    Directed graph implemented using an adjacency list.
     """
 
     def __init__(self):
@@ -24,7 +24,7 @@ class Grafo:
         }
 
     def obtener_configuracion(self):
-        """Devuelve la configuración global del grafo."""
+        """Returns the global configuration of the graph."""
         return {
             "presupuestoMinimoPorcentaje": self.configuracion.get("presupuestoMinimoPorcentaje", 35),
             "intervaloAlimentacionHoras": self.configuracion.get("intervaloAlimentacionHoras", 8),
@@ -33,19 +33,21 @@ class Grafo:
         }
 
     def obtener_aeronaves_disponibles(self):
-        """Devuelve los tipos de aeronaves definidos en la configuración."""
+        """Returns the types of aircraft defined in the configuration."""
         return list(self.configuracion.get("aeronaves", {}).keys())
 
     def obtener_costo_por_km(self, tipo_aeronave):
-        """Devuelve el costo por kilómetro para un tipo de aeronave."""
+        """Returns the cost per kilometer for a type of aircraft."""
         aeronave = self.configuracion.get("aeronaves", {}).get(tipo_aeronave, {})
         return aeronave.get("costoKm", 0)
 
     def obtener_tiempo_por_km(self, tipo_aeronave):
-        """Devuelve el tiempo por kilómetro para un tipo de aeronave."""
+        """Returns the time per kilometer for a type of aircraft."""
         aeronave = self.configuracion.get("aeronaves", {}).get(tipo_aeronave, {})
         return aeronave.get("tiempoKm", 0)
 
+
+    """Adds a vertex to the graph with the specified attributes, representing an airport with its details and costs."""
     def agregar_vertice(
         self,
         identificador,
@@ -75,7 +77,7 @@ class Grafo:
             )
 
         return self.vertices[identificador]
-
+    """Adds a directed edge between two vertices in the graph, representing a flight route with its distance, available aircraft, and cost attributes."""
     def agregar_arista(
         self,
         origen,
@@ -102,7 +104,7 @@ class Grafo:
         )
 
         self.vertices[origen].agregar_adyacencia(arista)
-
+    """Returns the vertex object for a given identifier, or None if it does not exist in the graph."""
     def obtener_vertice(self, identificador):
         return self.vertices.get(identificador)
 
@@ -116,7 +118,7 @@ class Grafo:
         return len(self.vertices)
     
     def bloquear_arista(self, origen, destino):
-        """Bloquea la ruta entre origen y destino."""
+        """Blocks the route between origin and destination."""
         vertice_origen = self.obtener_vertice(origen)
         if vertice_origen:
             for arista in vertice_origen.adyacencias:
@@ -126,7 +128,7 @@ class Grafo:
         return False
     
     def desbloquear_arista(self, origen, destino):
-        """Desbloquea la ruta entre origen y destino."""
+        """Unblocks the route between origin and destination."""
         vertice_origen = self.obtener_vertice(origen)
         if vertice_origen:
             for arista in vertice_origen.adyacencias:
@@ -136,11 +138,12 @@ class Grafo:
         return False
     
     def obtener_aristas_activas(self, origen):
-        """Devuelve las aristas activas desde el aeropuerto de origen."""
+        """Returns the active edges from the origin airport."""
         vertice_origen = self.obtener_vertice(origen)
         if vertice_origen:
             return [arista for arista in vertice_origen.adyacencias if arista.esta_activa()]
         return []
 
+    """Returns a string representation of the graph, showing the number of vertices (airports) it contains."""
     def __str__(self):
         return f"Grafo con {len(self.vertices)} aeropuertos"

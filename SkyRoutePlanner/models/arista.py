@@ -1,6 +1,6 @@
 class Arista:
     """
-    Representa una ruta aérea dirigida entre dos aeropuertos.
+    Represents a directed edge in the graph, connecting a source vertex to a destination vertex with attributes such as distance, cost, and availability.
     """
 
     def __init__(
@@ -24,8 +24,7 @@ class Arista:
 
     def obtener_peso(self):
         """
-        Peso genérico para algoritmos.
-        Inicialmente se usa la distancia.
+        Calculates the weight of the edge based on its distance and cost attributes, which can be used in pathfinding algorithms to determine the optimal route.
         """
         return self.distancia_km
 
@@ -35,14 +34,14 @@ class Arista:
             f"({self.distancia_km} km)"
         )
     def bloquear(self):
-        """Bloquea la ruta, impidiendo su uso en el planificador."""
+        """Blocks the route, preventing its use in the planner."""
         self.activa = False
     def desbloquear(self):
-        """Desbloquea la ruta, permitiendo su uso en el planificador."""
+        """Unblocks the route, allowing its use in the planner."""
         self.activa = True  
     def esta_activa(self):
-        """Indica si la ruta está activa y disponible para planificación."""
+        """Indicates if the route is active and available for planning."""
         return self.activa
     def esta_bloqueada(self):
-        """Indica si la ruta está bloqueada y no disponible para planificación."""
+        """Indicates if the route is blocked and not available for planning."""
         return not self.activa

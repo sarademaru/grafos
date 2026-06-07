@@ -1,7 +1,15 @@
 from dataclasses import dataclass
+from email.mime import text
 from heapq import heappop, heappush
 from itertools import count
-
+""" Itinerary Planner : This module provides functions to plan travel itineraries 
+based on a graph of locations and transportation options.
+ It includes algorithms to find routes that maximize 
+ the number of destinations visited within given budget and 
+ time constraints, as well as optimized routes based on specific 
+ criteria such as cost, time, or distance. The planner can handle 
+ various transportation modes and allows for flexible route planning 
+ with or without secondary locations. """
 
 CRITERION_DISTANCE = "distancia"
 CRITERION_TIME = "tiempo"
@@ -19,20 +27,24 @@ class RouteLeg:
 
 
 def _normalize_text(value):
+    """Normalizes text for consistent comparison (e.g., transport types)."""
     return str(value).strip().lower()
 
 
 def _is_secondary(vertex):
+    """Determines if a vertex is considered secondary (e.g., a hub or transit point)."""
     return not getattr(vertex, "es_hub", False)
 
 
 def _transport_matches(route_transport, selected_transport):
+    """Checks if a route's transport matches the selected transport, allowing for partial matches."""
     route = _normalize_text(route_transport)
     selected = _normalize_text(selected_transport)
     return route == selected or route in selected or selected in route
 
 
 def _allowed_transports_for_edge(grafo, edge, selected_transports):
+    """Determines which transports are allowed for a given edge based on the selected transports."""
     edge_transports = edge.aeronaves or grafo.obtener_aeronaves_disponibles()
     if not edge_transports:
         edge_transports = ["Transporte"]
@@ -45,6 +57,7 @@ def _allowed_transports_for_edge(grafo, edge, selected_transports):
 
 
 def _build_leg(grafo, origin_id, edge, transport):
+    """Builds a RouteLeg object for a given edge and transport, calculating distance, cost, and time."""
     distance = float(edge.distancia_km or 0)
     cost_per_km = float(grafo.obtener_costo_por_km(transport) or 0)
     time_per_km = float(grafo.obtener_tiempo_por_km(transport) or 0)
@@ -62,6 +75,7 @@ def _build_leg(grafo, origin_id, edge, transport):
 
 
 def _format_route(legs):
+    """Formats a list of RouteLegs into a human-readable itinerary with cumulative totals."""
     lines = []
     total_cost = 0
     total_time = 0
@@ -82,6 +96,7 @@ def _format_route(legs):
 
 
 def _route_summary(path, legs):
+    """Summarizes a route by calculating total cost, time, distance, and transports used."""
     return {
         "path": list(path),
         "legs": list(legs),
@@ -94,6 +109,7 @@ def _route_summary(path, legs):
 
 
 def _visit_route_priority(route, tie_breaker=CRITERION_COST):
+    """Determines the priority of a route for comparison, based on the number of destinations and tie-breaking criteria."""
     destinations = len(route["path"]) - 1
     if tie_breaker == CRITERION_TIME:
         return (destinations, -route["total_time"], -route["total_cost"])
@@ -101,6 +117,7 @@ def _visit_route_priority(route, tie_breaker=CRITERION_COST):
 
 
 def _better_visit_route(candidate, current, tie_breaker=CRITERION_COST):
+    """Determines if a candidate route is better than the current best route based on priority."""
     if current is None:
         return True
 
@@ -108,6 +125,7 @@ def _better_visit_route(candidate, current, tie_breaker=CRITERION_COST):
 
 
 def _transport_requirement_met(selected_transports, used_transports):
+    """Checks if all selected transports are represented in the used transports for a route."""
     for selected in selected_transports:
         if not any(_transport_matches(used, selected) for used in used_transports):
             return False
@@ -115,6 +133,7 @@ def _transport_requirement_met(selected_transports, used_transports):
 
 
 def _candidate_edges(grafo, current_id, selected_transports, include_secondary):
+    """Generates candidate edges from the current vertex, filtering by selected transports and secondary status."""
     current_vertex = grafo.obtener_vertice(current_id)
     if current_vertex is None:
         return
@@ -127,7 +146,7 @@ def _candidate_edges(grafo, current_id, selected_transports, include_secondary):
         for transport in _allowed_transports_for_edge(grafo, edge, selected_transports):
             yield _build_leg(grafo, current_id, edge, transport)
 
-
+    """Finds the route that maximizes the number of destinations visited within a given cost or time limit."""
 def _find_max_destinations_route(
     grafo,
     origin_id,
@@ -145,7 +164,10 @@ def _find_max_destinations_route(
     cost_limit = limit_value if limit_type == CRITERION_COST else max_cost
     time_limit = limit_value if limit_type == CRITERION_TIME else max_time
 
+
+
     def backtrack(current_id, visited, path, legs, total_cost, total_time, used_transports):
+        """Backtracking function to explore routes recursively, updating the best route found based on the number of destinations and tie-breaking criteria."""
         nonlocal best
 
         if destination_id is None or current_id == destination_id:
@@ -153,7 +175,7 @@ def _find_max_destinations_route(
                 candidate = _route_summary(path, legs)
                 if _better_visit_route(candidate, best, tie_breaker):
                     best = candidate
-
+        """Explore candidate edges from the current vertex, recursively backtracking to find the best route."""
         for leg in _candidate_edges(grafo, current_id, selected_transports, include_secondary):
             if leg.destination in visited:
                 continue
@@ -184,11 +206,14 @@ def _find_max_destinations_route(
     if not grafo.obtener_vertice(origin_id):
         return None
 
+    """Start backtracking from the origin vertex, initializing the visited set, path, legs, total cost, total time, and used transports."""
     backtrack(origin_id, {origin_id}, [origin_id], [], 0, 0, set())
     return best
 
 
+
 def _criterion_weight(leg, criterion):
+    """Calculates the weight of a route leg based on the specified criterion (distance, time, or cost)."""
     if criterion == CRITERION_TIME:
         return leg.time
     if criterion == CRITERION_COST:
@@ -196,6 +221,10 @@ def _criterion_weight(leg, criterion):
     return leg.distance
 
 
+"""Finds the best route from origin to destination 
+based on a specific criterion (distance, time, or cost) 
+using a modified Dijkstra's algorithm that considers multiple
+ labels for each vertex to handle different combinations of cost and time."""
 def find_best_route_by_criterion(
     grafo,
     origin_id,
@@ -208,7 +237,8 @@ def find_best_route_by_criterion(
 ):
     if not grafo.obtener_vertice(origin_id) or not grafo.obtener_vertice(destination_id):
         return None
-
+  
+  
     labels_by_vertex = {vertex.identificador: [] for vertex in grafo.obtener_vertices()}
     origin_label = {
         "weight": 0,
@@ -221,7 +251,10 @@ def find_best_route_by_criterion(
     sequence = count()
     heap = [(0, 0, 0, next(sequence), origin_id, origin_label)]
 
+
+
     def is_dominated(candidate, labels):
+        """Checks if a candidate label is dominated by any existing labels for the same vertex, meaning it is worse in terms of weight, cost, and time."""
         for label in labels:
             if (
                 label["weight"] <= candidate["weight"]
@@ -278,6 +311,7 @@ def find_best_route_by_criterion(
     return None
 
 
+"""Public functions to plan itineraries based on the graph, including basic itineraries that maximize destinations within budget and time constraints, and optimized routes based on specific criteria."""
 def plan_basic_itineraries(
     grafo,
     origin_id,
@@ -313,6 +347,7 @@ def plan_basic_itineraries(
     }
 
 
+"""Finds the best routes from origin to destination based on multiple criteria (distance, time, cost) and returns a dictionary of optimized routes for each criterion."""
 def plan_routes_by_criteria(
     grafo,
     origin_id,
@@ -337,7 +372,7 @@ def plan_routes_by_criteria(
         for criterion in criteria
     }
 
-
+"""Main function to plan itineraries, combining basic itineraries that maximize destinations with optimized routes based on specific criteria, and returning a comprehensive itinerary plan."""
 def plan_itinerary(
     grafo,
     origin_id,

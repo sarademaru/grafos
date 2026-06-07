@@ -27,17 +27,18 @@ from ui.graph_view import GraphView
 
 
 class PaginaPlanificador(QtWidgets.QWidget):
-    """Pagina para visualizar el grafo y planificar rutas."""
+    """Page for planning routes between airports based on user-selected criteria, budget, and available time. This page allows users to select origin and destination airports, specify optimization criteria (distance, time, cost), choose preferred transport types, and calculate the optimal route using the underlying graph data. The results are displayed in an executive summary format, and the selected route is highlighted in the graph view for easy visualization."""
 
     route_calculated = QtCore.pyqtSignal(dict)
 
+    """Initializes the user interface components of the route planner page, including the layout, title, control panel for selecting origin, destination, criteria, and transport preferences, as well as the graph view for visualizing the air network. This method sets up the structure and styling of the route planner page."""
     def __init__(self, parent=None):
         super().__init__(parent)
         self.grafo = None
         self.graph_view = GraphView()
         self.graph_view.node_selected.connect(self.on_node_selected)
         self._setup_ui()
-
+    """Returns a dictionary containing the types of aircraft defined in the configuration, which can be used to determine available transport options and their associated costs and times in the route planning process."""
     def _setup_ui(self):
         main_layout = QVBoxLayout(self)
         main_layout.setContentsMargins(24, 24, 24, 24)
@@ -203,12 +204,12 @@ class PaginaPlanificador(QtWidgets.QWidget):
         content_layout.addWidget(control_scroll)
         content_layout.addLayout(graph_layout, stretch=1)
         main_layout.addLayout(content_layout)
-
+    """Sets the graph data for the dashboard and updates the graph view and statistics accordingly. This method is called when a new graph is loaded or updated, allowing the dashboard to reflect the current state of the air network. It also triggers a refresh of the displayed statistics based on the new graph data."""
     def set_graph(self, grafo):
         self.grafo = grafo
         self.graph_view.set_graph(grafo)
         self._refresh_airports()
-
+    """Clears the current graph data from the dashboard, resetting the graph view and statistics to their default state. This method is useful when the user wants to start fresh with a new graph or when the existing graph data is no longer relevant. It ensures that all displayed information is cleared and ready for new input."""
     def clear_graph(self):
         self.grafo = None
         self.graph_view.clear_graph()
@@ -216,7 +217,7 @@ class PaginaPlanificador(QtWidgets.QWidget):
         self.dest_combo.clear()
         self._clear_summary()
         self._clear_selected_info()
-
+    """ Sets the last calculated route information for the dashboard, updating the displayed last route statistic and highlighting the route in the graph view. This method is called after a route calculation is performed, allowing the dashboard to show the most recent route found by the planner. It also triggers a refresh of the displayed statistics to reflect the new route information."""
     def _refresh_airports(self):
         self.origin_combo.clear()
         self.dest_combo.clear()
@@ -224,21 +225,21 @@ class PaginaPlanificador(QtWidgets.QWidget):
             codes = [vertice.identificador for vertice in self.grafo.obtener_vertices()]
             self.origin_combo.addItems(codes)
             self.dest_combo.addItems(codes)
-
+    """Auxiliary method to clear the selected airport information displayed in the control panel. This method resets all displayed fields related to the selected airport (such as code, name, city, country, and timezone) to their default placeholder values. It is typically called when the graph is cleared or when no airport is currently selected, ensuring that the displayed information is accurate and does not show outdated data."""
     def _clear_selected_info(self):
         self.selected_code.setText("Codigo: -")
         self.selected_name.setText("Nombre: -")
         self.selected_city.setText("Ciudad: -")
         self.selected_country.setText("Pais: -")
         self.selected_timezone.setText("Zona Horaria: -")
-
+    """Event handler for when a node (airport) is selected in the graph view. This method updates the displayed information about the selected airport in the control panel, showing details such as the airport code, name, city, country, and timezone. It is connected to the node_selected signal of the graph view, allowing it to respond dynamically to user interactions with the graph visualization."""
     def on_node_selected(self, vertice):
         self.selected_code.setText(f"Codigo: {vertice.identificador}")
         self.selected_name.setText(f"Nombre: {vertice.nombre}")
         self.selected_city.setText(f"Ciudad: {vertice.ciudad}")
         self.selected_country.setText(f"Pais: {vertice.pais}")
         self.selected_timezone.setText(f"Zona Horaria: {vertice.zona_horaria}")
-
+    """Event handler for when the "Calcular Ruta" button is clicked. This method validates the user input for origin, destination, selected criteria, transport preferences, budget, and available time. If the input is valid, it calls the plan_itinerary function to calculate the optimal route based on the selected options and updates the dashboard with the results. It also emits a signal with the calculated route information for further processing or display in other parts of the application."""
     def on_calculate_route(self):
         if not self.grafo:
             self.selected_info.setText("Carga un archivo JSON antes de calcular la ruta.")
@@ -359,7 +360,7 @@ class PaginaPlanificador(QtWidgets.QWidget):
                 },
             }
         )
-
+    """Auxiliary method to choose the primary route from the calculated results based on the selected criteria. This method iterates through the selected criteria in order of preference and returns the first valid route found for any of those criteria. If no valid route is found for the selected criteria, it falls back to checking the basic routes and returns the first valid one. If no valid routes are found at all, it returns None."""
     def _choose_primary_route(self, resultado, criterios_sel):
         for criterion in criterios_sel:
             route = resultado["optimized"].get(criterion)
@@ -371,7 +372,7 @@ class PaginaPlanificador(QtWidgets.QWidget):
                 return route
 
         return None
-
+    """Auxiliary method to display the executive summaries for each criterion in the control panel. This method clears any existing summaries and then creates a new summary block for each criterion result, showing details such as the criterion used, the route found, total distance, time, cost, and number of stops. If no route is found for a criterion, it indicates that the route is not available."""
     def _show_executive_summaries(self, criteria_results):
         self._clear_summary(show_placeholder=False)
         if not criteria_results:
@@ -385,7 +386,7 @@ class PaginaPlanificador(QtWidgets.QWidget):
                     item.get("route"),
                 )
             )
-
+    """Auxiliary method to build a summary block widget for a given criterion and route information. This method creates a formatted block of text displaying the criterion used, the route found, total distance, time, cost, and number of stops. If no route is available, it indicates that in the summary. The resulting widget is styled and can be added to the control panel for display."""
     def _build_criterion_summary_block(self, criterion_label, route):
         block = QFrame()
         block.setObjectName("summaryPanel")
@@ -420,13 +421,14 @@ class PaginaPlanificador(QtWidgets.QWidget):
             layout.addWidget(self._build_summary_label(line))
 
         return block
-
+    """Auxiliary method to build a formatted label widget for displaying summary information. This method creates a QLabel with the given text, applies styling, and allows for word wrapping to ensure that longer text is displayed properly within the layout. The resulting label can be used in the executive summary blocks to show details about the calculated routes."""
+    
     def _build_summary_label(self, text):
         label = QLabel(text)
         label.setObjectName("infoLabel")
         label.setWordWrap(True)
         return label
-
+    """Auxiliary method to clear the summary results displayed in the control panel. This method removes all existing summary widgets from the layout and optionally adds a placeholder message indicating that no route has been found. It is typically called before displaying new summary information to ensure that the displayed data is current and relevant to the latest route calculation."""
     def _clear_summary(self, show_placeholder=True):
         if not hasattr(self, "summary_results_layout"):
             return
