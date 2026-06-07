@@ -512,7 +512,7 @@ class PaginaViajeDinamico(QtWidgets.QWidget):
                 pass
             self.flight_timer.stop()
             self.graph_view.clear_flight_progress()
-            QMessageBox.warning(self, "Vuelo cancelado", str(exc))
+            self._show_warning("Vuelo cancelado", self._format_resource_exception_message(str(exc)))
             self._refresh_dynamic_view()
             return
 
@@ -531,7 +531,10 @@ class PaginaViajeDinamico(QtWidgets.QWidget):
         self.graph_view.highlight_route(self.gestor.ruta_actual)
         self._refresh_dynamic_view()
         if resultado and resultado.get("tipo") == "vuelo_cancelado":
-            QMessageBox.warning(self, "Vuelo cancelado", resultado.get("motivo", "Vuelo cancelado"))
+            self._show_warning(
+                "Vuelo cancelado",
+                self._format_resource_exception_message(resultado.get("motivo", "Vuelo cancelado")),
+            )
 
     def _first_payable_alternative_index(self):
         for index, alternativa in enumerate(self.alternativas):
@@ -836,7 +839,10 @@ class PaginaViajeDinamico(QtWidgets.QWidget):
         try:
             self.gestor.realizar_actividad(self.actividades_actuales[row])
         except ValueError as exc:
-            QMessageBox.warning(self, "No se puede realizar actividad", str(exc))
+            self._show_warning(
+                "No se puede realizar actividad",
+                self._format_resource_exception_message(str(exc)),
+            )
             return
         self._refresh_after_action()
 
@@ -852,7 +858,10 @@ class PaginaViajeDinamico(QtWidgets.QWidget):
         try:
             self.gestor.realizar_trabajo(self.trabajos_actuales[row], self.work_hours_spin.value())
         except ValueError as exc:
-            QMessageBox.warning(self, "No se puede aceptar trabajo", str(exc))
+            self._show_warning(
+                "No se puede aceptar trabajo",
+                self._format_resource_exception_message(str(exc)),
+            )
             return
         self._refresh_after_action()
 
@@ -960,7 +969,7 @@ class PaginaViajeDinamico(QtWidgets.QWidget):
         try:
             self.gestor.bloquear_ruta(origen, destino)
         except ValueError as exc:
-            QMessageBox.warning(self, "Error al bloquear ruta", str(exc))
+            self._show_warning("Error al bloquear ruta", self._format_resource_exception_message(str(exc)))
             return
 
         self._refresh_routes_panel()
