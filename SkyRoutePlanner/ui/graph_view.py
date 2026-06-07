@@ -7,6 +7,7 @@ from PyQt6.QtWidgets import (
     QGraphicsTextItem,
     QGraphicsLineItem,
     QGraphicsPolygonItem,
+    QGraphicsRectItem,
 )
 from PyQt6.QtGui import QPen, QBrush, QColor, QFont, QPolygonF, QPainter
 from PyQt6.QtCore import Qt, QPointF, pyqtSignal
@@ -90,6 +91,7 @@ class AristaGrafica:
         self.highlighted = False
         self.line_item = None
         self.arrow_item = None
+        self.label_background_item = None
         self.label_item = None
 
     def add_to_scene(self, scene):
@@ -117,13 +119,34 @@ class AristaGrafica:
         self.arrow_item.setZValue(0)
         scene.addItem(self.arrow_item)
 
+        unit = QPointF(direction.x() / length, direction.y() / length)
+        perp = QPointF(-unit.y(), unit.x())
+        label_side = 1 if self.origin_id <= self.destination_id else -1
+        label_offset = 18
+        label_center = QPointF((start_point.x() + end_point.x()) / 2, (start_point.y() + end_point.y()) / 2)
+        label_center += perp * label_offset * label_side
+
         self.label_item = QGraphicsTextItem(f"{self.distancia_km} km")
         label_font = QFont("Consolas", 9)
         self.label_item.setFont(label_font)
-        midpoint = QPointF((start_point.x() + end_point.x()) / 2, (start_point.y() + end_point.y()) / 2)
         label_rect = self.label_item.boundingRect()
-        self.label_item.setPos(midpoint.x() - label_rect.width() / 2, midpoint.y() - label_rect.height() / 2)
-        self.label_item.setZValue(0)
+        label_pos = QPointF(label_center.x() - label_rect.width() / 2, label_center.y() - label_rect.height() / 2)
+
+        padding_x = 5
+        padding_y = 2
+        self.label_background_item = QGraphicsRectItem(
+            label_pos.x() - padding_x,
+            label_pos.y() - padding_y,
+            label_rect.width() + padding_x * 2,
+            label_rect.height() + padding_y * 2,
+        )
+        self.label_background_item.setPen(QPen(Qt.PenStyle.NoPen))
+        self.label_background_item.setBrush(QBrush(QColor(15, 23, 42, 205)))
+        self.label_background_item.setZValue(3)
+        scene.addItem(self.label_background_item)
+
+        self.label_item.setPos(label_pos)
+        self.label_item.setZValue(4)
         scene.addItem(self.label_item)
         self.refresh_style()
 
@@ -155,6 +178,11 @@ class AristaGrafica:
         if self.arrow_item:
             self.arrow_item.setBrush(QBrush(color))
             self.arrow_item.setOpacity(opacity)
+
+        if self.label_background_item:
+            background_color = QColor(69, 10, 10, 215) if is_blocked else QColor(15, 23, 42, 215)
+            self.label_background_item.setBrush(QBrush(background_color))
+            self.label_background_item.setOpacity(0.75 if is_blocked else 1.0)
 
         if self.label_item:
             self.label_item.setDefaultTextColor(label_color)
