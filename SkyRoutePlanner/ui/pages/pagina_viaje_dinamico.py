@@ -33,6 +33,7 @@ class PaginaViajeDinamico(QtWidgets.QWidget):
         self.grafo = None
         self.gestor = None
         self.alternativas = []
+        self.sin_destinos_eficientes = False
         self.actividades_actuales = []
         self.trabajos_actuales = []
         self.graph_view = GraphView()
@@ -54,6 +55,17 @@ class PaginaViajeDinamico(QtWidgets.QWidget):
         QMessageBox.warning(self, title, message)
 
     def _format_route_block_message(self, alternativa):
+        if alternativa.get("bloqueada_por_origen_inicial", False):
+            origen = alternativa.get("destino", "origen")
+            if alternativa.get("fin_por_origen_inicial", False):
+                return "No existen más destinos disponibles para continuar el viaje de manera eficiente."
+
+            return (
+                "Se evita regresar al aeropuerto de origen inicial.\n\n"
+                f"Origen inicial: {origen}.\n"
+                "Seleccione una alternativa hacia otro destino disponible."
+            )
+
         tramo = float(alternativa.get("distancia_km", 0) or 0)
         limite = float(alternativa.get("limite_subsidio_km", 0) or 0)
         usada = float(alternativa.get("distancia_subsidiada_usada_km", 0) or 0)
@@ -403,6 +415,7 @@ class PaginaViajeDinamico(QtWidgets.QWidget):
 
     def _reset_simulation_view(self):
         self.alternativas = []
+        self.sin_destinos_eficientes = False
         self.flight_timer.stop()
         self.graph_view.clear_flight_progress()
         self.alternatives_table.setRowCount(0)
@@ -542,6 +555,67 @@ class PaginaViajeDinamico(QtWidgets.QWidget):
                 return index
         return -1
 
+    def _obtener_origen_inicial(self):
+        if not self.gestor:
+            return None
+
+        estado = self.gestor.obtener_estado()
+        ruta = estado.get("ruta_actual", [])
+        if not ruta:
+            return None
+        return str(ruta[0]).upper().strip()
+
+    def _aplicar_regla_regreso_origen(self):
+        self.sin_destinos_eficientes = False
+        origen_inicial = self._obtener_origen_inicial()
+        if not origen_inicial or not self.alternativas:
+            return
+
+        alternativas_viables = [
+            alternativa
+            for alternativa in self.alternativas
+            if alternativa.get("puede_pagarse", True)
+        ]
+        if not alternativas_viables:
+            return
+
+        alternativas_viables_no_origen = [
+            alternativa
+            for alternativa in alternativas_viables
+            if str(alternativa.get("destino", "")).upper().strip() != origen_inicial
+        ]
+        solo_regreso_al_origen = not alternativas_viables_no_origen
+
+        for alternativa in self.alternativas:
+            destino = str(alternativa.get("destino", "")).upper().strip()
+            if destino == origen_inicial:
+                alternativa["puede_pagarse"] = False
+                alternativa["bloqueada_por_origen_inicial"] = True
+                alternativa["fin_por_origen_inicial"] = solo_regreso_al_origen
+
+        self.sin_destinos_eficientes = solo_regreso_al_origen
+
+    def _sugerir_alternativa_ui(self):
+        visitados = set()
+        if self.gestor:
+            visitados = {codigo.upper().strip() for codigo in self.gestor.viajero.aeropuertos_visitados}
+
+        no_visitadas = [
+            alternativa
+            for alternativa in self.alternativas
+            if alternativa.get("puede_pagarse", True)
+            and str(alternativa.get("destino", "")).upper().strip() not in visitados
+        ]
+        if no_visitadas:
+            return no_visitadas[0]
+
+        pagables = [
+            alternativa
+            for alternativa in self.alternativas
+            if alternativa.get("puede_pagarse", True)
+        ]
+        return pagables[0] if pagables else None
+
     def _refresh_dynamic_view(self):
         self._refresh_status()
         self._refresh_alternatives()
@@ -587,9 +661,14 @@ class PaginaViajeDinamico(QtWidgets.QWidget):
             return
 
         self.alternativas = self.gestor.obtener_alternativas_disponibles()
+        self._aplicar_regla_regreso_origen()
         self._refresh_subsidy_summary()
-        sugerida = self.gestor.sugerir_siguiente_alternativa()
-        if sugerida:
+        sugerida = self._sugerir_alternativa_ui()
+        if self.sin_destinos_eficientes:
+            self.suggested_label.setText(
+                "No existen más destinos disponibles para continuar el viaje de manera eficiente."
+            )
+        elif sugerida:
             self.suggested_label.setText(
                 "Sugerencia: "
                 f"{sugerida['origen']} -> {sugerida['destino']} en {sugerida['transporte']} "
