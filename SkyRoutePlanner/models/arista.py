@@ -11,10 +11,11 @@ class Arista:
         costo_base=0,
         estancia_minima=0,
         costo_cero=False,
+        activa=True,
     ):
         self.vertice_destino = vertice_destino
         self.distancia_km = distancia_km
-
+        self.activa = activa
         self.aeronaves = aeronaves if aeronaves else []
 
         self.costo_base = costo_base
@@ -33,3 +34,15 @@ class Arista:
             f"{self.vertice_destino.identificador} "
             f"({self.distancia_km} km)"
         )
+    def bloquear(self):
+        """Bloquea la ruta, impidiendo su uso en el planificador."""
+        self.activa = False
+    def desbloquear(self):
+        """Desbloquea la ruta, permitiendo su uso en el planificador."""
+        self.activa = True  
+    def esta_activa(self):
+        """Indica si la ruta está activa y disponible para planificación."""
+        return self.activa
+    def esta_bloqueada(self):
+        """Indica si la ruta está bloqueada y no disponible para planificación."""
+        return not self.activa

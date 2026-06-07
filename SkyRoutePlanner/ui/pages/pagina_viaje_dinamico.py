@@ -36,6 +36,9 @@ class PaginaViajeDinamico(QtWidgets.QWidget):
         self.actividades_actuales = []
         self.trabajos_actuales = []
         self.graph_view = GraphView()
+        self.flight_timer = QtCore.QTimer(self)
+        self.flight_timer.setInterval(200)
+        self.flight_timer.timeout.connect(self._on_flight_timer_tick)
         self._setup_ui()
 
     def _money(self, value):
@@ -235,6 +238,25 @@ class PaginaViajeDinamico(QtWidgets.QWidget):
         self.advance_button.clicked.connect(self.on_advance_selected)
         self.advance_button.setEnabled(False)
 
+        routes_title = QLabel("Interrupciones de Ruta")
+        routes_title.setObjectName("sectionTitle")
+        self.routes_table = QTableWidget(0, 3)
+        self.routes_table.setObjectName("routeResults")
+        self.routes_table.setHorizontalHeaderLabels(["Origen", "Destino", "Estado"])
+        self.routes_table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
+        self.routes_table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
+        self.routes_table.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
+        self.routes_table.setAlternatingRowColors(True)
+        self.routes_table.setMinimumHeight(120)
+        self.routes_table.setHorizontalScrollBarPolicy(QtCore.Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self.routes_table.verticalHeader().setVisible(False)
+        self.routes_table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
+
+        self.block_route_button = QPushButton("Bloquear Ruta")
+        self.block_route_button.setObjectName("primaryButton")
+        self.block_route_button.setCursor(QtCore.Qt.CursorShape.PointingHandCursor)
+        self.block_route_button.clicked.connect(self.on_block_route)
+
         status_title = QLabel("Estado actual")
         status_title.setObjectName("sectionTitle")
         self.status_grid = QGridLayout()
@@ -252,7 +274,9 @@ class PaginaViajeDinamico(QtWidgets.QWidget):
         self._add_status_row(3, "Visitados", self.status_labels["visitados"])
         self._add_status_row(4, "Alimentacion", self.status_labels["alimentacion"])
         self._add_status_row(5, "Hospedaje", self.status_labels["hospedaje"])
-
+        
+        activities_title = QLabel("Actividades")
+        activities_title.setObjectName("sectionTitle")
         self.activity_table = QTableWidget(0, 3)
         self.activity_table.setObjectName("routeResults")
         self.activity_table.setHorizontalHeaderLabels(["Actividad", "Duracion", "Costo"])
@@ -268,9 +292,13 @@ class PaginaViajeDinamico(QtWidgets.QWidget):
 
         activity_buttons = QHBoxLayout()
         self.do_activity_button = QPushButton("Realizar actividad")
+        self.do_activity_button.setObjectName("primaryButton")
+        self.do_activity_button.setCursor(QtCore.Qt.CursorShape.PointingHandCursor)
         self.do_activity_button.clicked.connect(self.on_do_activity)
         activity_buttons.addWidget(self.do_activity_button)
 
+        job_title = QLabel("Trabajos disponibles")
+        job_title.setObjectName("sectionTitle")
         self.job_table = QTableWidget(0, 3)
         self.job_table.setObjectName("routeResults")
         self.job_table.setHorizontalHeaderLabels(["Trabajo", "Tarifa", "Max"])
@@ -296,6 +324,8 @@ class PaginaViajeDinamico(QtWidgets.QWidget):
 
         job_buttons = QHBoxLayout()
         self.accept_job_button = QPushButton("Aceptar trabajo")
+        self.accept_job_button.setObjectName("primaryButton")
+        self.accept_job_button.setCursor(QtCore.Qt.CursorShape.PointingHandCursor)
         self.accept_job_button.clicked.connect(self.on_accept_job)
         job_buttons.addWidget(self.accept_job_button)
 
@@ -316,10 +346,13 @@ class PaginaViajeDinamico(QtWidgets.QWidget):
         control_layout.addWidget(self.subsidy_label)
         control_layout.addWidget(self.alternatives_table)
         control_layout.addWidget(self.advance_button)
-        control_layout.addWidget(QLabel("Actividades"))
+        control_layout.addWidget(routes_title)
+        control_layout.addWidget(self.routes_table)
+        control_layout.addWidget(self.block_route_button)
+        control_layout.addWidget(activities_title)
         control_layout.addWidget(self.activity_table)
         control_layout.addLayout(activity_buttons)
-        control_layout.addWidget(QLabel("Trabajos"))
+        control_layout.addWidget(job_title)
         control_layout.addWidget(self.job_table)
         control_layout.addLayout(job_form)
         control_layout.addLayout(job_buttons)
@@ -356,6 +389,7 @@ class PaginaViajeDinamico(QtWidgets.QWidget):
         self._reset_simulation_view()
 
     def clear_graph(self):
+        self.flight_timer.stop()
         self.grafo = None
         self.gestor = None
         self.graph_view.clear_graph()
@@ -369,6 +403,8 @@ class PaginaViajeDinamico(QtWidgets.QWidget):
 
     def _reset_simulation_view(self):
         self.alternativas = []
+        self.flight_timer.stop()
+        self.graph_view.clear_flight_progress()
         self.alternatives_table.setRowCount(0)
         self.advance_button.setEnabled(False)
         self.suggested_label.setText("Sugerencia: -")
@@ -380,6 +416,7 @@ class PaginaViajeDinamico(QtWidgets.QWidget):
         self.trabajos_actuales = []
         self.activity_table.setRowCount(0)
         self.job_table.setRowCount(0)
+        self.routes_table.setRowCount(0)
         self._refresh_action_buttons()
         self.decision_log.setPlainText("Aun no hay decisiones registradas.")
 
@@ -399,11 +436,16 @@ class PaginaViajeDinamico(QtWidgets.QWidget):
         )
         self.gestor = GestorViaje(self.grafo, viajero)
         self.gestor.iniciar_viaje_dinamico(origen)
+        self.flight_timer.stop()
+        self.graph_view.clear_flight_progress()
         self.graph_view.highlight_route([origen])
         self._refresh_dynamic_view()
 
     def on_advance_selected(self):
         if not self.gestor:
+            return
+        if self.gestor.estado_movimiento == "en_vuelo":
+            QMessageBox.warning(self, "Vuelo en curso", "Espera a que termine el vuelo actual.")
             return
 
         index = self._selected_alternative_index()
@@ -425,7 +467,11 @@ class PaginaViajeDinamico(QtWidgets.QWidget):
             )
             return
 
-        self.graph_view.highlight_route(self.gestor.ruta_actual)
+        vuelo = self.gestor.vuelo_actual
+        if vuelo:
+            self.graph_view.highlight_route([vuelo["origen"], vuelo["destino"]])
+            self.graph_view.set_flight_progress(vuelo["origen"], vuelo["destino"], 0.0)
+            self.flight_timer.start()
         self._refresh_dynamic_view()
 
     def on_alternative_table_selection_changed(self):
@@ -442,9 +488,50 @@ class PaginaViajeDinamico(QtWidgets.QWidget):
         return self._selected_table_row()
 
     def _can_advance_from_index(self, index):
+        if self.gestor and self.gestor.estado_movimiento == "en_vuelo":
+            return False
         if index < 0 or index >= len(self.alternativas):
             return False
         return bool(self.alternativas[index].get("puede_pagarse", True))
+
+    def _on_flight_timer_tick(self):
+        if not self.gestor or self.gestor.estado_movimiento != "en_vuelo" or not self.gestor.vuelo_actual:
+            self.flight_timer.stop()
+            self.graph_view.clear_flight_progress()
+            return
+
+        vuelo = self.gestor.vuelo_actual
+        total = float(vuelo.get("tiempo_total_horas", 0) or 0)
+        delta = total / 60 if total > 0 else 0
+        try:
+            resultado = self.gestor.avanzar_vuelo(delta)
+        except ValueError as exc:
+            try:
+                self.gestor.cancelar_vuelo(str(exc))
+            except ValueError:
+                pass
+            self.flight_timer.stop()
+            self.graph_view.clear_flight_progress()
+            QMessageBox.warning(self, "Vuelo cancelado", str(exc))
+            self._refresh_dynamic_view()
+            return
+
+        if self.gestor.estado_movimiento == "en_vuelo" and self.gestor.vuelo_actual:
+            vuelo = self.gestor.vuelo_actual
+            self.graph_view.set_flight_progress(
+                vuelo["origen"],
+                vuelo["destino"],
+                self.gestor.obtener_progreso_vuelo(),
+            )
+            self._refresh_status()
+            return
+
+        self.flight_timer.stop()
+        self.graph_view.clear_flight_progress()
+        self.graph_view.highlight_route(self.gestor.ruta_actual)
+        self._refresh_dynamic_view()
+        if resultado and resultado.get("tipo") == "vuelo_cancelado":
+            QMessageBox.warning(self, "Vuelo cancelado", resultado.get("motivo", "Vuelo cancelado"))
 
     def _first_payable_alternative_index(self):
         for index, alternativa in enumerate(self.alternativas):
@@ -455,6 +542,7 @@ class PaginaViajeDinamico(QtWidgets.QWidget):
     def _refresh_dynamic_view(self):
         self._refresh_status()
         self._refresh_alternatives()
+        self._refresh_routes_panel()
         self._refresh_action_controls()
         self._refresh_decision_log()
 
@@ -464,7 +552,14 @@ class PaginaViajeDinamico(QtWidgets.QWidget):
 
         estado = self.gestor.obtener_estado()
         viajero = estado["viajero"]
-        self.status_labels["aeropuerto"].setText(str(estado["aeropuerto_actual"]))
+        vuelo = estado.get("vuelo_actual")
+        if estado.get("estado_movimiento") == "en_vuelo" and vuelo:
+            progreso = self.gestor.obtener_progreso_vuelo() * 100
+            self.status_labels["aeropuerto"].setText(
+                f"En vuelo {vuelo['origen']} -> {vuelo['destino']} ({progreso:.0f}%)"
+            )
+        else:
+            self.status_labels["aeropuerto"].setText(str(estado["aeropuerto_actual"]))
         self.status_labels["presupuesto"].setText(f"${viajero['presupuesto_actual']:.2f}")
         self.status_labels["tiempo"].setText(f"{viajero['tiempo_restante_horas']:.2f} h")
         self.status_labels["visitados"].setText(str(viajero["cantidad_aeropuertos_visitados"]))
@@ -481,6 +576,11 @@ class PaginaViajeDinamico(QtWidgets.QWidget):
 
         if not self.gestor:
             self.suggested_label.setText("Sugerencia: -")
+            return
+        if self.gestor.estado_movimiento == "en_vuelo":
+            self.suggested_label.setText("Sugerencia: vuelo en curso.")
+            self._refresh_subsidy_summary()
+            self._refresh_alternatives_table()
             return
 
         self.alternativas = self.gestor.obtener_alternativas_disponibles()
@@ -583,6 +683,12 @@ class PaginaViajeDinamico(QtWidgets.QWidget):
         for column in range(self.alternatives_table.columnCount()):
             self._paint_table_cell(row, column, color)
 
+    def _paint_routes_table_row(self, row, color):
+        for column in range(self.routes_table.columnCount()):
+            item = self.routes_table.item(row, column)
+            if item:
+                item.setBackground(QtGui.QBrush(QtGui.QColor(color)))
+
     def _refresh_action_controls(self):
         self.actividades_actuales = []
         self.trabajos_actuales = []
@@ -651,11 +757,52 @@ class PaginaViajeDinamico(QtWidgets.QWidget):
 
     def _refresh_action_buttons(self):
         has_gestor = self.gestor is not None
-        activity_selected = has_gestor and 0 <= self._selected_activity_row() < len(self.actividades_actuales)
-        job_selected = has_gestor and 0 <= self._selected_job_row() < len(self.trabajos_actuales)
-        self.do_activity_button.setEnabled(activity_selected)
-        self.accept_job_button.setEnabled(job_selected)
-        self.work_hours_spin.setEnabled(job_selected)
+        en_aeropuerto = has_gestor and self.gestor.estado_movimiento == "en_aeropuerto"
+        activity_row = self._selected_activity_row()
+        job_row = self._selected_job_row()
+        activity_selected = en_aeropuerto and 0 <= activity_row < len(self.actividades_actuales)
+        job_selected = en_aeropuerto and 0 <= job_row < len(self.trabajos_actuales)
+        activity_available = activity_selected and not self._actividad_realizada(self.actividades_actuales[activity_row])
+        job_available = job_selected and not self._trabajo_realizado(self.trabajos_actuales[job_row])
+        self.do_activity_button.setEnabled(activity_available)
+        self.accept_job_button.setEnabled(job_available)
+        self.work_hours_spin.setEnabled(job_available)
+
+    def _normalizar_texto_registro(self, valor):
+        return str(valor or "").strip().lower()
+
+    def _normalizar_numero_registro(self, valor):
+        return float(valor or 0)
+
+    def _actividad_realizada(self, actividad):
+        if not self.gestor or not actividad:
+            return False
+        aeropuerto_actual = self._normalizar_texto_registro(self.gestor.obtener_estado().get("aeropuerto_actual"))
+        nombre = self._normalizar_texto_registro(getattr(actividad, "nombre", ""))
+        costo = self._normalizar_numero_registro(getattr(actividad, "costo_usd", 0))
+        tiempo_horas = self._normalizar_numero_registro(getattr(actividad, "duracion_horas", 0))
+        return any(
+            self._normalizar_texto_registro(registro.get("nombre")) == nombre
+            and self._normalizar_texto_registro(registro.get("aeropuerto")) == aeropuerto_actual
+            and self._normalizar_numero_registro(registro.get("costo")) == costo
+            and self._normalizar_numero_registro(registro.get("tiempo_horas")) == tiempo_horas
+            for registro in self.gestor.viajero.actividades_realizadas
+        )
+
+    def _trabajo_realizado(self, trabajo):
+        if not self.gestor or not trabajo:
+            return False
+        aeropuerto_actual = self._normalizar_texto_registro(self.gestor.obtener_estado().get("aeropuerto_actual"))
+        descripcion = self._normalizar_texto_registro(getattr(trabajo, "nombre", ""))
+        tarifa_hora = self._normalizar_numero_registro(getattr(trabajo, "tarifa_hora", 0))
+        max_horas = self._normalizar_numero_registro(getattr(trabajo, "max_horas", 0))
+        return any(
+            self._normalizar_texto_registro(registro.get("descripcion")) == descripcion
+            and self._normalizar_texto_registro(registro.get("aeropuerto")) == aeropuerto_actual
+            and self._normalizar_numero_registro(registro.get("tarifa_hora")) == tarifa_hora
+            and self._normalizar_numero_registro(registro.get("max_horas")) == max_horas
+            for registro in self.gestor.viajero.trabajos_realizados
+        )
 
     def _refresh_job_hours_limit(self):
         row = self._selected_job_row()
@@ -683,15 +830,15 @@ class PaginaViajeDinamico(QtWidgets.QWidget):
         row = self._selected_activity_row()
         if row < 0 or row >= len(self.actividades_actuales):
             return
+        if self._actividad_realizada(self.actividades_actuales[row]):
+            self._refresh_action_buttons()
+            return
         try:
             self.gestor.realizar_actividad(self.actividades_actuales[row])
         except ValueError as exc:
-            self._show_warning(
-                "No se puede realizar actividad",
-                self._format_resource_exception_message(str(exc)),
-            )
+            QMessageBox.warning(self, "No se puede realizar actividad", str(exc))
             return
-        self._refresh_dynamic_view()
+        self._refresh_after_action()
 
     def on_accept_job(self):
         if not self.gestor:
@@ -699,15 +846,21 @@ class PaginaViajeDinamico(QtWidgets.QWidget):
         row = self._selected_job_row()
         if row < 0 or row >= len(self.trabajos_actuales):
             return
+        if self._trabajo_realizado(self.trabajos_actuales[row]):
+            self._refresh_action_buttons()
+            return
         try:
             self.gestor.realizar_trabajo(self.trabajos_actuales[row], self.work_hours_spin.value())
         except ValueError as exc:
-            self._show_warning(
-                "No se puede aceptar trabajo",
-                self._format_resource_exception_message(str(exc)),
-            )
+            QMessageBox.warning(self, "No se puede aceptar trabajo", str(exc))
             return
-        self._refresh_dynamic_view()
+        self._refresh_after_action()
+
+    def _refresh_after_action(self):
+        self._refresh_status()
+        self._refresh_alternatives()
+        self._refresh_action_controls()
+        self._refresh_decision_log()
 
     def _refresh_decision_log(self):
         if not self.gestor:
@@ -726,6 +879,13 @@ class PaginaViajeDinamico(QtWidgets.QWidget):
                     f"{index}. Vuelo {decision['origen']} -> {decision['destino']} "
                     f"({decision['transporte']}) | ${decision['costo_vuelo']:.2f} | "
                     f"{decision['tiempo_vuelo_horas']:.2f} h"
+                )
+            elif tipo == "vuelo_iniciado":
+                lines.append(f"{index}. {decision.get('descripcion', 'Vuelo iniciado')}")
+            elif tipo == "vuelo_cancelado":
+                lines.append(
+                    f"{index}. Vuelo cancelado {decision['origen']} -> {decision['destino']} | "
+                    f"{decision.get('motivo', 'Vuelo cancelado')}"
                 )
             elif tipo in ("alimentacion", "hospedaje"):
                 lines.append(
@@ -755,3 +915,60 @@ class PaginaViajeDinamico(QtWidgets.QWidget):
                 lines.append(f"{index}. {decision.get('descripcion', tipo)}")
 
         self.decision_log.setPlainText("\n".join(lines))
+
+    def _refresh_routes_panel(self):
+        self.routes_table.clearSpans()
+        self.routes_table.setRowCount(0)
+        if not self.grafo:
+            return
+
+        aristas = []
+        for vertice in self.grafo.obtener_vertices():
+            for arista in vertice.adyacencias:
+                aristas.append((vertice.identificador, arista))
+
+        self.routes_table.setRowCount(len(aristas))
+        for row, (origen, arista) in enumerate(aristas):
+            destino = arista.vertice_destino.identificador
+            estado = "Bloqueada" if arista.esta_bloqueada() else "Activa"
+            values = [origen, destino, estado]
+            self._set_table_row(self.routes_table, row, values)
+
+            if arista.esta_bloqueada():
+                self._paint_routes_table_row(row, "#dc2626")
+
+    def on_block_route(self):
+        if not self.gestor:
+            QMessageBox.warning(self, "Validacion", "Inicia un viaje antes de bloquear rutas.")
+            return
+
+        selected = self.routes_table.selectionModel().selectedRows()
+        if not selected:
+            QMessageBox.warning(self, "Validacion", "Selecciona una ruta para bloquear.")
+            return
+
+        row = selected[0].row()
+        origen_item = self.routes_table.item(row, 0)
+        destino_item = self.routes_table.item(row, 1)
+        if not origen_item or not destino_item:
+            return
+
+        origen = origen_item.text()
+        destino = destino_item.text()
+        habia_vuelo = self.gestor.estado_movimiento == "en_vuelo"
+
+        try:
+            self.gestor.bloquear_ruta(origen, destino)
+        except ValueError as exc:
+            QMessageBox.warning(self, "Error al bloquear ruta", str(exc))
+            return
+
+        self._refresh_routes_panel()
+        self._refresh_alternatives()
+        self.graph_view.refresh_graph_state()
+        if habia_vuelo and self.gestor.estado_movimiento == "en_aeropuerto":
+            self.flight_timer.stop()
+            self.graph_view.clear_flight_progress()
+            self.graph_view.highlight_route(self.gestor.ruta_actual)
+            QMessageBox.warning(self, "Vuelo cancelado", "La ruta bloqueada interrumpio el vuelo en curso.")
+        self._refresh_dynamic_view()

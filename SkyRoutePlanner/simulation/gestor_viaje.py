@@ -32,6 +32,8 @@ class GestorViaje:
         self.estancia_minima_actual_horas: float = 0.0
         self.tiempo_estancia_actual_horas: float = 0.0
         self.decisiones: List[Dict[str, Any]] = []
+        self.estado_movimiento: str = "en_aeropuerto"
+        self.vuelo_actual: Optional[Dict[str, Any]] = None
 
     def iniciar_viaje(self, ruta: List[str]) -> None:
         """Inicia el viaje con una ruta (lista de codigos de aeropuerto).
@@ -42,6 +44,8 @@ class GestorViaje:
             raise ValueError("La ruta no puede estar vacia")
         self.ruta_actual = [c.upper().strip() for c in ruta]
         self.indice_actual = 0
+        self.estado_movimiento = "en_aeropuerto"
+        self.vuelo_actual = None
         codigo = self.ruta_actual[0]
         self.registrar_llegada(codigo)
 
@@ -79,6 +83,38 @@ class GestorViaje:
             "max_horas": trabajo.max_horas,
         }
 
+    def _normalizar_texto_registro(self, valor: Any) -> str:
+        return str(valor or "").strip().lower()
+
+    def _normalizar_numero_registro(self, valor: Any) -> float:
+        return float(valor or 0)
+
+    def _actividad_ya_realizada(self, actividad_dict: Dict[str, Any], aeropuerto_actual: str) -> bool:
+        nombre = self._normalizar_texto_registro(actividad_dict.get("nombre"))
+        aeropuerto = self._normalizar_texto_registro(aeropuerto_actual)
+        costo = self._normalizar_numero_registro(actividad_dict.get("costo"))
+        tiempo_horas = self._normalizar_numero_registro(actividad_dict.get("tiempo_horas"))
+        return any(
+            self._normalizar_texto_registro(registro.get("nombre")) == nombre
+            and self._normalizar_texto_registro(registro.get("aeropuerto")) == aeropuerto
+            and self._normalizar_numero_registro(registro.get("costo")) == costo
+            and self._normalizar_numero_registro(registro.get("tiempo_horas")) == tiempo_horas
+            for registro in self.viajero.actividades_realizadas
+        )
+
+    def _trabajo_ya_realizado(self, trabajo_dict: Dict[str, Any], aeropuerto_actual: str) -> bool:
+        descripcion = self._normalizar_texto_registro(trabajo_dict.get("descripcion"))
+        aeropuerto = self._normalizar_texto_registro(aeropuerto_actual)
+        tarifa_hora = self._normalizar_numero_registro(trabajo_dict.get("tarifa_hora"))
+        max_horas = self._normalizar_numero_registro(trabajo_dict.get("max_horas"))
+        return any(
+            self._normalizar_texto_registro(registro.get("descripcion")) == descripcion
+            and self._normalizar_texto_registro(registro.get("aeropuerto")) == aeropuerto
+            and self._normalizar_numero_registro(registro.get("tarifa_hora")) == tarifa_hora
+            and self._normalizar_numero_registro(registro.get("max_horas")) == max_horas
+            for registro in self.viajero.trabajos_realizados
+        )
+
     def realizar_actividad(self, actividad: Any) -> Dict[str, Any]:
         """Realiza una actividad: acepta `Actividad` o diccionario compatible.
 
@@ -94,6 +130,8 @@ class GestorViaje:
         tiempo_actividad = float(actividad_dict.get("tiempo_horas", 0) or 0)
         costo_actividad = float(actividad_dict.get("costo", 0) or 0)
         aeropuerto_actual = self._obtener_codigo_actual()
+        if self._actividad_ya_realizada(actividad_dict, aeropuerto_actual):
+            raise ValueError("La actividad ya fue realizada en este aeropuerto")
         actividad_dict.setdefault("aeropuerto", aeropuerto_actual)
         actividad_dict.setdefault("instante_simulacion", self.tiempo_transcurrido_horas)
 
@@ -152,6 +190,8 @@ class GestorViaje:
         if max_horas is not None and horas_trabajadas > float(max_horas):
             raise ValueError(f"No se pueden trabajar {horas_trabajadas:g} horas: maximo {float(max_horas):g}")
         aeropuerto_actual = self._obtener_codigo_actual()
+        if self._trabajo_ya_realizado(trabajo_dict, aeropuerto_actual):
+            raise ValueError("El trabajo ya fue realizado en este aeropuerto")
         trabajo_dict.setdefault("aeropuerto", aeropuerto_actual)
         trabajo_dict.setdefault("instante_simulacion", self.tiempo_transcurrido_horas)
 
@@ -238,6 +278,8 @@ class GestorViaje:
             "trabajos_realizados": list(self.viajero.trabajos_realizados),
             "tiempo_libre_registrado": list(self.viajero.tiempo_libre_registrado),
             "decisiones": list(self.decisiones),
+            "estado_movimiento": self.estado_movimiento,
+            "vuelo_actual": dict(self.vuelo_actual) if self.vuelo_actual else None,
         }
 
     # ------------------------------------------------------------------
@@ -261,11 +303,16 @@ class GestorViaje:
         self.estancia_minima_actual_horas = 0.0
         self.tiempo_estancia_actual_horas = 0.0
         self.decisiones = []
+        self.estado_movimiento = "en_aeropuerto"
+        self.vuelo_actual = None
         self.registrar_llegada(aeropuerto_origen)
         self._registrar_decision("inicio", f"Viaje dinamico iniciado en {aeropuerto_origen}")
 
     def obtener_alternativas_disponibles(self, transportes_preferidos: Optional[List[str]] = None) -> List[Dict[str, Any]]:
         """Devuelve los vuelos posibles desde el aeropuerto actual."""
+        if self.estado_movimiento == "en_vuelo":
+            return []
+
         aeropuerto_actual = self._obtener_codigo_actual()
         vertice = self.grafo.obtener_vertice(aeropuerto_actual)
         if vertice is None:
@@ -273,6 +320,8 @@ class GestorViaje:
 
         alternativas = []
         for arista in vertice.adyacencias:
+            if arista.esta_bloqueada():
+                continue
             for transporte in self._transportes_para_arista(arista, transportes_preferidos):
                 costo = self._calcular_costo_tramo(arista, transporte)
                 tiempo = self._calcular_tiempo_tramo(arista, transporte)
@@ -315,16 +364,16 @@ class GestorViaje:
         return pagables[0] if pagables else None
 
     def avanzar_a_destino(self, destino: str, transporte: Optional[str] = None) -> Dict[str, Any]:
-        """Ejecuta un paso de viaje hacia un destino adyacente.
+        """Inicia un vuelo hacia un destino adyacente sin registrar llegada inmediata."""
+        if self.estado_movimiento == "en_vuelo":
+            raise ValueError("Ya hay un vuelo en curso")
 
-        Durante el vuelo aplica alimentacion obligatoria cada 8 horas usando
-        el costo del ultimo aeropuerto visitado. Al llegar aplica hospedaje
-        obligatorio si han pasado 20 horas desde el ultimo hospedaje.
-        """
         aeropuerto_actual = self._obtener_codigo_actual()
         arista = self._buscar_arista(aeropuerto_actual, destino)
         if arista is None:
             raise ValueError(f"No existe ruta directa de {aeropuerto_actual} a {destino}")
+        if arista.esta_bloqueada():
+            raise ValueError(f"La ruta {aeropuerto_actual} -> {destino} esta bloqueada")
 
         transporte_elegido = transporte or self._elegir_transporte_mas_barato(arista)
         if transporte_elegido not in self._transportes_para_arista(arista, None):
@@ -335,14 +384,62 @@ class GestorViaje:
         evento_tiempo_libre = self.registrar_tiempo_libre_pendiente()
         costo_vuelo = self._calcular_costo_tramo(arista, transporte_elegido)
         tiempo_vuelo = self._calcular_tiempo_tramo(arista, transporte_elegido)
-        distancia_vuelo = float(arista.distancia_km or 0)
 
         self.viajero.gastar(costo_vuelo)
-        self._consumir_tiempo_con_obligatorias(tiempo_vuelo)
+        self.estado_movimiento = "en_vuelo"
+        self.vuelo_actual = {
+            "origen": aeropuerto_actual,
+            "destino": arista.vertice_destino.identificador,
+            "arista": arista,
+            "transporte": transporte_elegido,
+            "tiempo_total_horas": tiempo_vuelo,
+            "tiempo_transcurrido_horas": 0.0,
+            "costo_vuelo": costo_vuelo,
+            "tiempo_libre_origen": evento_tiempo_libre,
+        }
+        self._registrar_decision("vuelo_iniciado", f"Vuelo iniciado {aeropuerto_actual} -> {self.vuelo_actual['destino']}")
+        return dict(self.vuelo_actual)
+
+    def obtener_progreso_vuelo(self) -> float:
+        if not self.vuelo_actual:
+            return 0.0
+        total = float(self.vuelo_actual.get("tiempo_total_horas", 0) or 0)
+        if total <= 0:
+            return 1.0
+        transcurrido = float(self.vuelo_actual.get("tiempo_transcurrido_horas", 0) or 0)
+        return max(0.0, min(1.0, transcurrido / total))
+
+    def avanzar_vuelo(self, horas: float) -> Optional[Dict[str, Any]]:
+        if self.estado_movimiento != "en_vuelo" or not self.vuelo_actual:
+            return None
+
+        arista = self.vuelo_actual["arista"]
+        if arista.esta_bloqueada():
+            return self.cancelar_vuelo("Ruta bloqueada durante el vuelo")
+
+        total = float(self.vuelo_actual.get("tiempo_total_horas", 0) or 0)
+        transcurrido = float(self.vuelo_actual.get("tiempo_transcurrido_horas", 0) or 0)
+        delta = max(0.0, min(float(horas), total - transcurrido))
+        if delta > 0:
+            self._consumir_tiempo_con_obligatorias(delta)
+            self.vuelo_actual["tiempo_transcurrido_horas"] = transcurrido + delta
+
+        if self.obtener_progreso_vuelo() >= 1.0:
+            return self.completar_vuelo()
+        return None
+
+    def completar_vuelo(self) -> Dict[str, Any]:
+        if self.estado_movimiento != "en_vuelo" or not self.vuelo_actual:
+            raise ValueError("No hay un vuelo en curso")
+
+        vuelo = self.vuelo_actual
+        arista = vuelo["arista"]
+        distancia_vuelo = float(arista.distancia_km or 0)
+
         self.distancia_volada_km += distancia_vuelo
         if getattr(arista, "costo_cero", False):
             self.distancia_subsidiada_km += distancia_vuelo
-        self.registrar_llegada(arista.vertice_destino.identificador)
+        self.registrar_llegada(vuelo["destino"])
         self.estancia_minima_actual_horas = self._normalizar_estancia_minima_horas(
             getattr(arista, "estancia_minima", 0) or 0
         )
@@ -351,23 +448,50 @@ class GestorViaje:
 
         decision = {
             "tipo": "vuelo",
-            "origen": aeropuerto_actual,
-            "destino": arista.vertice_destino.identificador,
-            "transporte": transporte_elegido,
+            "origen": vuelo["origen"],
+            "destino": vuelo["destino"],
+            "transporte": vuelo["transporte"],
             "distancia_km": distancia_vuelo,
             "es_subsidiada": bool(getattr(arista, "costo_cero", False)),
-            "costo_vuelo": costo_vuelo,
-            "tiempo_vuelo_horas": tiempo_vuelo,
+            "costo_vuelo": vuelo["costo_vuelo"],
+            "tiempo_vuelo_horas": vuelo["tiempo_total_horas"],
             "eventos_obligatorios": eventos_llegada,
-            "tiempo_libre_origen": evento_tiempo_libre,
+            "tiempo_libre_origen": vuelo.get("tiempo_libre_origen"),
             "presupuesto_restante": self.viajero.presupuesto_actual,
             "tiempo_restante_horas": self.viajero.tiempo_restante_horas,
         }
         self.decisiones.append(decision)
+        self.vuelo_actual = None
+        self.estado_movimiento = "en_aeropuerto"
+        return decision
+
+    def cancelar_vuelo(self, motivo: str = "Vuelo cancelado") -> Dict[str, Any]:
+        if self.estado_movimiento != "en_vuelo" or not self.vuelo_actual:
+            raise ValueError("No hay un vuelo en curso")
+
+        vuelo = self.vuelo_actual
+        costo_vuelo = float(vuelo.get("costo_vuelo", 0) or 0)
+        self.viajero.presupuesto_actual += costo_vuelo
+        self.viajero.gasto_total = max(0.0, self.viajero.gasto_total - costo_vuelo)
+        decision = {
+            "tipo": "vuelo_cancelado",
+            "origen": vuelo["origen"],
+            "destino": vuelo["destino"],
+            "motivo": motivo,
+            "tiempo_vuelo_horas": vuelo.get("tiempo_transcurrido_horas", 0.0),
+            "presupuesto_restante": self.viajero.presupuesto_actual,
+            "tiempo_restante_horas": self.viajero.tiempo_restante_horas,
+        }
+        self.decisiones.append(decision)
+        self.vuelo_actual = None
+        self.estado_movimiento = "en_aeropuerto"
         return decision
 
     def obtener_actividades_y_trabajos_actuales(self) -> Dict[str, Any]:
         """Lista actividades opcionales y trabajos en el aeropuerto actual."""
+        if self.estado_movimiento == "en_vuelo":
+            return {"actividades": [], "trabajos": []}
+
         vertice = self.grafo.obtener_vertice(self._obtener_codigo_actual())
         if vertice is None:
             return {"actividades": [], "trabajos": []}
@@ -510,3 +634,18 @@ class GestorViaje:
                 "presupuesto": self.viajero.presupuesto_actual,
             }
         )
+    def bloquear_ruta(self, origen: str, destino: str) -> None:
+        """Bloquea una ruta directa entre origen y destino."""
+        origen = origen.upper().strip()
+        destino = destino.upper().strip()
+        arista = self._buscar_arista(origen, destino)
+        if arista is None:
+            raise ValueError(f"No existe ruta directa de {origen} a {destino}")
+        arista.bloquear()
+        if (
+            self.estado_movimiento == "en_vuelo"
+            and self.vuelo_actual
+            and self.vuelo_actual["origen"] == origen
+            and self.vuelo_actual["destino"] == destino
+        ):
+            self.cancelar_vuelo("Ruta bloqueada durante el vuelo")

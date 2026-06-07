@@ -18,7 +18,7 @@ def dijkstra(grafo, start_id):
         if current_vertex is None:
             continue
 
-        for arista in current_vertex.adyacencias:
+        for arista in grafo.obtener_aristas_activas(current_id):
             neighbor = arista.vertice_destino
             alt = current_distance + arista.obtener_peso()
             if alt < distances[neighbor.identificador]:
