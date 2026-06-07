@@ -1,3 +1,5 @@
+import re
+
 from PyQt6 import QtCore, QtGui, QtWidgets
 from PyQt6.QtWidgets import (
     QAbstractItemView,
@@ -35,6 +37,125 @@ class PaginaViajeDinamico(QtWidgets.QWidget):
         self.trabajos_actuales = []
         self.graph_view = GraphView()
         self._setup_ui()
+
+    def _money(self, value):
+        return f"${float(value or 0):.2f}"
+
+    def _hours(self, value):
+        return f"{float(value or 0):.2f} h"
+
+    def _km(self, value):
+        return f"{float(value or 0):.0f} km"
+
+    def _show_warning(self, title, message):
+        QMessageBox.warning(self, title, message)
+
+    def _format_route_block_message(self, alternativa):
+        tramo = float(alternativa.get("distancia_km", 0) or 0)
+        limite = float(alternativa.get("limite_subsidio_km", 0) or 0)
+        usada = float(alternativa.get("distancia_subsidiada_usada_km", 0) or 0)
+        disponible = max(0.0, limite - usada)
+
+        if alternativa.get("es_subsidiada", False) and not alternativa.get("puede_usar_subsidio", True):
+            return (
+                "No puede utilizar esta ruta subsidiada.\n\n"
+                f"Distancia del tramo: {self._km(tramo)}.\n"
+                f"Distancia subsidiada disponible: {self._km(disponible)}."
+            )
+
+        costo = float(alternativa.get("costo_vuelo", 0) or 0)
+        presupuesto = 0.0
+        if self.gestor:
+            presupuesto = float(self.gestor.viajero.presupuesto_actual or 0)
+        return (
+            "No se puede avanzar.\n"
+            f"Se requieren {self._money(costo)} para continuar,\n"
+            f"pero solo dispone de {self._money(presupuesto)}."
+        )
+
+    def _format_route_exception_message(self, message, alternativa=None):
+        if "No existe ruta directa" in message and alternativa:
+            origen = alternativa.get("origen", "-")
+            destino = alternativa.get("destino", "-")
+            return (
+                "No se encontro una ruta directa para la seleccion actual.\n\n"
+                f"Origen seleccionado: {origen}.\n"
+                f"Destino seleccionado: {destino}."
+            )
+
+        if "ruta subsidiada supera" in message and alternativa:
+            return self._format_route_block_message(alternativa)
+
+        return self._format_resource_exception_message(message)
+
+    def _format_resource_exception_message(self, message):
+        spend_match = re.search(
+            r"Cannot spend ([0-9]+(?:\.[0-9]+)?): only ([0-9]+(?:\.[0-9]+)?) available",
+            message,
+        )
+        if spend_match:
+            return (
+                "No se puede avanzar.\n"
+                f"Se requieren {self._money(spend_match.group(1))} para continuar,\n"
+                f"pero solo dispone de {self._money(spend_match.group(2))}."
+            )
+
+        time_match = re.search(
+            r"Cannot consume ([0-9]+(?:\.[0-9]+)?) hours: only ([0-9]+(?:\.[0-9]+)?) available",
+            message,
+        )
+        if time_match:
+            return (
+                "No hay tiempo suficiente para continuar.\n"
+                f"Tiempo requerido: {self._hours(time_match.group(1))}.\n"
+                f"Tiempo disponible: {self._hours(time_match.group(2))}."
+            )
+
+        activity_budget = re.search(
+            r"Insufficient budget for activity '(.+)': need ([0-9]+(?:\.[0-9]+)?), have ([0-9]+(?:\.[0-9]+)?)",
+            message,
+        )
+        if activity_budget:
+            return (
+                f"No se puede realizar la actividad \"{activity_budget.group(1)}\".\n"
+                f"Costo requerido: {self._money(activity_budget.group(2))}.\n"
+                f"Presupuesto disponible: {self._money(activity_budget.group(3))}."
+            )
+
+        activity_time = re.search(
+            r"Insufficient time for activity '(.+)': need ([0-9]+(?:\.[0-9]+)?) hours, have ([0-9]+(?:\.[0-9]+)?) hours",
+            message,
+        )
+        if activity_time:
+            return (
+                f"No se puede realizar la actividad \"{activity_time.group(1)}\".\n"
+                f"Tiempo requerido: {self._hours(activity_time.group(2))}.\n"
+                f"Tiempo disponible: {self._hours(activity_time.group(3))}."
+            )
+
+        work_time = re.search(
+            r"Insufficient time for work: need ([0-9]+(?:\.[0-9]+)?) hours, have ([0-9]+(?:\.[0-9]+)?) hours",
+            message,
+        )
+        if work_time:
+            return (
+                "No se puede aceptar el trabajo.\n"
+                f"Tiempo requerido: {self._hours(work_time.group(1))}.\n"
+                f"Tiempo disponible: {self._hours(work_time.group(2))}."
+            )
+
+        if "Solo se puede trabajar" in message:
+            return "Solo puede aceptar trabajos cuando el presupuesto esta por debajo del minimo configurado."
+        if "Work hours must be positive" in message:
+            return "Ingrese una cantidad de horas mayor que cero para aceptar el trabajo."
+        if "Spending amount must be non-negative" in message:
+            return "El costo no puede ser negativo."
+        if "Income amount must be non-negative" in message:
+            return "El ingreso no puede ser negativo."
+        if "Time consumption must be non-negative" in message:
+            return "El tiempo no puede ser negativo."
+
+        return message
 
     def _setup_ui(self):
         layout = QVBoxLayout(self)
@@ -264,12 +385,12 @@ class PaginaViajeDinamico(QtWidgets.QWidget):
 
     def on_start_trip(self):
         if not self.grafo:
-            QMessageBox.warning(self, "Validacion", "Carga un grafo antes de iniciar el viaje dinamico.")
+            self._show_warning("Validacion", "Carga un grafo antes de iniciar el viaje dinamico.")
             return
 
         origen = self.origin_combo.currentText()
         if not origen:
-            QMessageBox.warning(self, "Validacion", "Selecciona un aeropuerto de origen.")
+            self._show_warning("Validacion", "Selecciona un aeropuerto de origen.")
             return
 
         viajero = Viajero(
@@ -291,18 +412,17 @@ class PaginaViajeDinamico(QtWidgets.QWidget):
 
         alternativa = self.alternativas[index]
         if not alternativa.get("puede_pagarse", True):
-            QMessageBox.warning(
-                self,
-                "No se puede avanzar",
-                "La alternativa seleccionada no es pagable con el presupuesto o subsidio actual.",
-            )
+            self._show_warning("No se puede avanzar", self._format_route_block_message(alternativa))
             self._refresh_dynamic_view()
             return
 
         try:
             self.gestor.avanzar_a_destino(alternativa["destino"], alternativa["transporte"])
         except ValueError as exc:
-            QMessageBox.warning(self, "No se puede avanzar", str(exc))
+            self._show_warning(
+                "No se puede avanzar",
+                self._format_route_exception_message(str(exc), alternativa),
+            )
             return
 
         self.graph_view.highlight_route(self.gestor.ruta_actual)
@@ -416,24 +536,33 @@ class PaginaViajeDinamico(QtWidgets.QWidget):
                 f"{float(alternativa.get('distancia_km', 0) or 0):.2f}",
                 f"${float(alternativa.get('costo_vuelo', 0) or 0):.2f}",
                 f"{float(alternativa.get('tiempo_vuelo_horas', 0) or 0):.2f}",
-                "Sí" if alternativa.get("es_subsidiada", False) else "No",
+                "Si" if alternativa.get("es_subsidiada", False) else "No",
             ]
+
+            row_enabled = alternativa.get("puede_pagarse", True)
+            blocked_message = ""
+            if not row_enabled:
+                blocked_message = self._format_route_block_message(alternativa)
 
             for column, value in enumerate(values):
                 item = QTableWidgetItem(str(value))
                 item.setTextAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
-                if not alternativa.get("puede_pagarse", True):
+                if not row_enabled:
                     item.setForeground(QtGui.QBrush(QtGui.QColor("#94a3b8")))
+                    item.setToolTip(blocked_message)
+                    item.setFlags(item.flags() & ~QtCore.Qt.ItemFlag.ItemIsEnabled)
                 self.alternatives_table.setItem(row, column, item)
 
             if alternativa.get("es_subsidiada", False):
                 self._paint_table_row(row, "#713f12")
+            if not row_enabled:
+                self._paint_table_row(row, "#334155")
 
             costo = float(alternativa.get("costo_vuelo", 0) or 0)
             tiempo = float(alternativa.get("tiempo_vuelo_horas", 0) or 0)
-            if costo == menor_costo:
+            if row_enabled and costo == menor_costo:
                 self._paint_table_cell(row, 3, "#14532d")
-            if tiempo == menor_tiempo:
+            if row_enabled and tiempo == menor_tiempo:
                 self._paint_table_cell(row, 4, "#1e3a8a")
 
         self.alternatives_table.resizeRowsToContents()
@@ -557,7 +686,10 @@ class PaginaViajeDinamico(QtWidgets.QWidget):
         try:
             self.gestor.realizar_actividad(self.actividades_actuales[row])
         except ValueError as exc:
-            QMessageBox.warning(self, "No se puede realizar actividad", str(exc))
+            self._show_warning(
+                "No se puede realizar actividad",
+                self._format_resource_exception_message(str(exc)),
+            )
             return
         self._refresh_dynamic_view()
 
@@ -570,7 +702,10 @@ class PaginaViajeDinamico(QtWidgets.QWidget):
         try:
             self.gestor.realizar_trabajo(self.trabajos_actuales[row], self.work_hours_spin.value())
         except ValueError as exc:
-            QMessageBox.warning(self, "No se puede aceptar trabajo", str(exc))
+            self._show_warning(
+                "No se puede aceptar trabajo",
+                self._format_resource_exception_message(str(exc)),
+            )
             return
         self._refresh_dynamic_view()
 
