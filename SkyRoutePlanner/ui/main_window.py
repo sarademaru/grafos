@@ -75,6 +75,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self.planificador_page.route_calculated.connect(self.on_route_calculated)
         self.config_page.graph_loaded.connect(self.on_graph_loaded)
         self.config_page.system_reset.connect(self.on_system_reset)
+        self.config_page.configuration_updated.connect(self.on_graph_configuration_updated)
 
         self.page_stack = QtWidgets.QStackedWidget()
         self.page_stack.addWidget(self.inicio_page)
@@ -375,6 +376,12 @@ class MainWindow(QtWidgets.QMainWindow):
         self.reportes_page.clear_report()
         self.status_label.setText("Status: System reset")
         self.log_view.append("System reset requested.")
+
+    def on_graph_configuration_updated(self):
+        if self.viaje_dinamico_page:
+            self.viaje_dinamico_page.on_graph_configuration_updated()
+        self.status_label.setText("Status: Configuration updated")
+        self.log_view.append("Graph configuration updated.")
 
     def on_route_calculated(self, payload):
         self.last_route_payload = payload

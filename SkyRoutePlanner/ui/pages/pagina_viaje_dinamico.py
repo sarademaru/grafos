@@ -421,6 +421,12 @@ class PaginaViajeDinamico(QtWidgets.QWidget):
         self.origin_combo.clear()
         self._reset_simulation_view()
 
+    def on_graph_configuration_updated(self):
+        if not self.grafo:
+            return
+        if self.gestor:
+            self._refresh_dynamic_view()
+
     """Auxiliary method to refresh the list of available airports in the origin selection combo box. This method clears the current items in the combo box and repopulates it with the identifiers of the vertices from the graph, allowing the user to select a valid starting point for the dynamic travel simulation."""
     def _refresh_airports(self):
         self.origin_combo.clear()
