@@ -30,11 +30,9 @@ class MainWindow(QtWidgets.QMainWindow):
 
         header_widget = self._build_header()
         body_widget = self._build_body()
-        footer_widget = self._build_footer()
 
         main_layout.addWidget(header_widget)
         main_layout.addWidget(body_widget, stretch=1)
-        main_layout.addWidget(footer_widget)
 
         self.setStyleSheet(self._load_styles())
         self.sidebar.set_default_selection()
@@ -88,29 +86,6 @@ class MainWindow(QtWidgets.QMainWindow):
         body_layout.addWidget(self.page_stack, stretch=1)
 
         return body
-
-    def _build_footer(self):
-        footer = QtWidgets.QFrame()
-        footer.setObjectName("footer")
-        footer.setMaximumHeight(58)
-        footer_layout = QtWidgets.QVBoxLayout(footer)
-        footer_layout.setContentsMargins(24, 4, 24, 4)
-        footer_layout.setSpacing(2)
-
-        log_title = QtWidgets.QLabel("System Log")
-        log_title.setObjectName("logTitle")
-
-        self.log_view = QtWidgets.QTextEdit()
-        self.log_view.setReadOnly(True)
-        self.log_view.setObjectName("logView")
-        self.log_view.setMinimumHeight(24)
-        self.log_view.setMaximumHeight(30)
-        self.log_view.setPlainText("Application initialized. Navigation is ready.")
-
-        footer_layout.addWidget(log_title)
-        footer_layout.addWidget(self.log_view)
-
-        return footer
 
     def _load_styles(self):
         return """
@@ -174,23 +149,6 @@ class MainWindow(QtWidgets.QMainWindow):
             QPushButton#sidebarButton:checked {
                 background: #7c3aed;
                 color: #ffffff;
-            }
-            QFrame#footer {
-                background: #5b21b6;
-                border-top: 1px solid #2d3748;
-            }
-            QLabel#logTitle {
-                color: #e2e8f0;
-                font-size: 11px;
-                font-weight: 600;
-            }
-            QTextEdit#logView {
-                background: #4c1d95;
-                color: #e2e8f0;
-                border: 1px solid #334155;
-                font-family: Consolas, monospace;
-                font-size: 10px;
-                min-height: 24px;
             }
             QTextEdit#routeResults {
                 background: #0f172a;
@@ -353,7 +311,6 @@ class MainWindow(QtWidgets.QMainWindow):
         self.page_stack.setCurrentIndex(index)
         if index == 3:
             self._refresh_reports_from_sources()
-        self.log_view.append(f"Switched to page index {index}.")
 
     def on_graph_loaded(self, grafo):
         self.grafo = grafo
@@ -365,7 +322,6 @@ class MainWindow(QtWidgets.QMainWindow):
         self.sidebar.select_index(1)
         self.page_stack.setCurrentIndex(1)
         self.status_label.setText("Status: Graph loaded")
-        self.log_view.append(f"Loaded graph with {grafo.cantidad_vertices()} airports.")
 
     def on_system_reset(self):
         self.grafo = None
@@ -375,19 +331,16 @@ class MainWindow(QtWidgets.QMainWindow):
         self.viaje_dinamico_page.clear_graph()
         self.reportes_page.clear_report()
         self.status_label.setText("Status: System reset")
-        self.log_view.append("System reset requested.")
 
     def on_graph_configuration_updated(self):
         if self.viaje_dinamico_page:
             self.viaje_dinamico_page.on_graph_configuration_updated()
         self.status_label.setText("Status: Configuration updated")
-        self.log_view.append("Graph configuration updated.")
 
     def on_route_calculated(self, payload):
         self.last_route_payload = payload
         self.inicio_page.set_last_route(payload)
         self.reportes_page.set_planning_report(payload)
-        self.log_view.append("Route calculated. Reports planning section updated.")
 
     def _refresh_reports_from_sources(self):
         gestor = getattr(self.viaje_dinamico_page, "gestor", None)
