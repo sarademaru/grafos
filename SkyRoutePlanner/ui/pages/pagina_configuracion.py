@@ -4,6 +4,7 @@ from pathlib import Path
 from PyQt6 import QtWidgets, QtCore
 from PyQt6.QtWidgets import QFileDialog, QMessageBox
 
+from ui import preferences
 from utils.json_loader import cargar_json
 
 
@@ -13,6 +14,7 @@ class PaginaConfiguracion(QtWidgets.QWidget):
     graph_loaded = QtCore.pyqtSignal(object)
     system_reset = QtCore.pyqtSignal()
     configuration_updated = QtCore.pyqtSignal()
+    distance_labels_visibility_changed = QtCore.pyqtSignal(bool)
 
     AIRCRAFT_ALIASES = ["Comercial", "Regional", "Helice"]
     AIRCRAFT_FALLBACK_KEYS = {
@@ -67,6 +69,23 @@ class PaginaConfiguracion(QtWidgets.QWidget):
         info_layout.addWidget(self.airports_row)
         info_layout.addWidget(self.routes_row)
         info_layout.addWidget(self.status_row)
+
+        visual_group = QtWidgets.QFrame()
+        visual_group.setObjectName("infoFrame")
+        visual_layout = QtWidgets.QVBoxLayout(visual_group)
+        visual_layout.setContentsMargins(20, 20, 20, 20)
+        visual_layout.setSpacing(12)
+
+        visual_title = QtWidgets.QLabel("Preferencias visuales")
+        visual_title.setObjectName("sectionTitle")
+
+        self.distance_labels_checkbox = QtWidgets.QCheckBox("Mostrar distancias en el grafo")
+        self.distance_labels_checkbox.setObjectName("infoLabel")
+        self.distance_labels_checkbox.setChecked(preferences.mostrar_distancias_grafo)
+        self.distance_labels_checkbox.stateChanged.connect(self.on_distance_labels_changed)
+
+        visual_layout.addWidget(visual_title)
+        visual_layout.addWidget(self.distance_labels_checkbox)
 
         # --- Aircraft configuration group (table-based, stable) ---
         aircraft_group = QtWidgets.QGroupBox("Configuración de Aeronaves")
@@ -164,6 +183,7 @@ class PaginaConfiguracion(QtWidgets.QWidget):
         layout.addWidget(title)
         layout.addLayout(button_layout)
         layout.addWidget(info_frame)
+        layout.addWidget(visual_group)
         layout.addWidget(aircraft_group, 0)
         layout.addStretch()
 
@@ -257,6 +277,11 @@ class PaginaConfiguracion(QtWidgets.QWidget):
         self._refresh_aircraft_inputs()
         self._set_status("Valores de aeronaves restaurados desde el JSON", success=True)
         self.configuration_updated.emit()
+
+    def on_distance_labels_changed(self, state):
+        visible = state == QtCore.Qt.CheckState.Checked.value
+        preferences.mostrar_distancias_grafo = visible
+        self.distance_labels_visibility_changed.emit(visible)
 
     def cargar_archivo(self):
         archivo, _ = QFileDialog.getOpenFileName(

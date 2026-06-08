@@ -1,4 +1,4 @@
-﻿from math import cos, pi, sin, sqrt
+﻿from math import atan2, cos, pi, sin, sqrt
 
 from PyQt6.QtWidgets import (
     QGraphicsView,
@@ -128,33 +128,52 @@ class AristaGrafica:
         unit = QPointF(direction.x() / length, direction.y() / length)
         perp = QPointF(-unit.y(), unit.x())
         label_side = 1 if self.origin_id <= self.destination_id else -1
-        label_offset = 18
-        label_center = QPointF((start_point.x() + end_point.x()) / 2, (start_point.y() + end_point.y()) / 2)
-        label_center += perp * label_offset * label_side
+        label_offset = 14
 
         self.label_item = QGraphicsTextItem(f"{self.distancia_km} km")
         label_font = QFont("Consolas", 9)
         self.label_item.setFont(label_font)
         label_rect = self.label_item.boundingRect()
+
+        arrow_size = 14
+        label_gap = 8
+        label_distance_from_tip = arrow_size + label_rect.width() / 2 + label_gap
+        label_center = end_point - unit * label_distance_from_tip
+        label_center += perp * label_offset * label_side
         label_pos = QPointF(label_center.x() - label_rect.width() / 2, label_center.y() - label_rect.height() / 2)
+
+        label_angle = atan2(end_point.y() - start_point.y(), end_point.x() - start_point.x()) * 180 / pi
+        if label_angle > 90 or label_angle < -90:
+            label_angle += 180
 
         padding_x = 5
         padding_y = 2
         self.label_background_item = QGraphicsRectItem(
-            label_pos.x() - padding_x,
-            label_pos.y() - padding_y,
+            -padding_x,
+            -padding_y,
             label_rect.width() + padding_x * 2,
             label_rect.height() + padding_y * 2,
         )
         self.label_background_item.setPen(QPen(Qt.PenStyle.NoPen))
         self.label_background_item.setBrush(QBrush(QColor(15, 23, 42, 205)))
+        self.label_background_item.setPos(label_pos)
+        self.label_background_item.setTransformOriginPoint(label_rect.width() / 2, label_rect.height() / 2)
+        self.label_background_item.setRotation(label_angle)
         self.label_background_item.setZValue(3)
         scene.addItem(self.label_background_item)
 
         self.label_item.setPos(label_pos)
+        self.label_item.setTransformOriginPoint(label_rect.width() / 2, label_rect.height() / 2)
+        self.label_item.setRotation(label_angle)
         self.label_item.setZValue(4)
         scene.addItem(self.label_item)
         self.refresh_style()
+
+    def mostrar_etiqueta(self, visible):
+        if self.label_background_item:
+            self.label_background_item.setVisible(visible)
+        if self.label_item:
+            self.label_item.setVisible(visible)
 
     """Auxiliary method to set the highlighted state of the edge. This method updates the internal highlighted flag and calls the refresh_style method to update the visual appearance of the edge based on whether it is highlighted or not. Highlighting can be used to visually distinguish edges that are part of a selected route or path in the graph."""
     def set_highlighted(self, highlighted):
@@ -233,6 +252,7 @@ class GraphView(QGraphicsView):
         self.node_items = {}
         self.edge_items = []
         self.flight_marker = None
+        self.etiquetas_distancia_visibles = True
 
     """Auxiliary method to set the graph data and trigger the drawing of the graph. This method takes a graph object as input, stores it in the instance variable, and calls the dibujar_grafo method to visualize the graph in the view. It allows the view to be updated with new graph data whenever necessary."""
     def set_graph(self, grafo):
@@ -278,11 +298,18 @@ class GraphView(QGraphicsView):
                     arista,
                 )
                 edge.add_to_scene(self.scene)
+                edge.mostrar_etiqueta(self.etiquetas_distancia_visibles)
                 self.edge_items.append(edge)
 
         self.scene.setBackgroundBrush(QColor("#0f172a"))
         self.scene.setSceneRect(self.scene.itemsBoundingRect().adjusted(-80, -80, 80, 80))
         self._zoom_to_fit()
+
+    def mostrar_etiquetas(self, visible):
+        self.etiquetas_distancia_visibles = bool(visible)
+        for edge in self.edge_items:
+            edge.mostrar_etiqueta(self.etiquetas_distancia_visibles)
+        self.viewport().update()
 
     """Auxiliary method to calculate the positions of the vertices in the graph for visualization. This method uses a circular layout for small graphs and a hub-and-spoke layout for larger graphs, positioning hubs closer to the center and other vertices around them. It returns a dictionary mapping vertex identifiers to their calculated positions as QPointF objects."""
     def _calculate_positions(self, grafo):

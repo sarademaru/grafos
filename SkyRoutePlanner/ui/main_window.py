@@ -7,6 +7,7 @@ from .pages import (
     PaginaReportes,
     PaginaConfiguracion,
 )
+from ui import preferences
 
 
 class MainWindow(QtWidgets.QMainWindow):
@@ -74,6 +75,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self.config_page.graph_loaded.connect(self.on_graph_loaded)
         self.config_page.system_reset.connect(self.on_system_reset)
         self.config_page.configuration_updated.connect(self.on_graph_configuration_updated)
+        self.config_page.distance_labels_visibility_changed.connect(self.on_distance_labels_visibility_changed)
 
         self.page_stack = QtWidgets.QStackedWidget()
         self.page_stack.addWidget(self.inicio_page)
@@ -255,6 +257,15 @@ class MainWindow(QtWidgets.QMainWindow):
                 background: #111827;
                 color: #f8fafc;
             }
+            QCheckBox {
+                color: #cbd5e1;
+                font-size: 14px;
+                spacing: 8px;
+            }
+            QCheckBox::indicator {
+                width: 16px;
+                height: 16px;
+            }
             QLabel#sectionTitle {
                 color: #d8b4fe;
                 font-size: 18px;
@@ -318,6 +329,7 @@ class MainWindow(QtWidgets.QMainWindow):
         self.inicio_page.set_graph(grafo)
         self.planificador_page.set_graph(grafo)
         self.viaje_dinamico_page.set_graph(grafo)
+        self._apply_distance_labels_preference()
         self.reportes_page.clear_report()
         self.sidebar.select_index(1)
         self.page_stack.setCurrentIndex(1)
@@ -336,6 +348,17 @@ class MainWindow(QtWidgets.QMainWindow):
         if self.viaje_dinamico_page:
             self.viaje_dinamico_page.on_graph_configuration_updated()
         self.status_label.setText("Status: Configuration updated")
+
+    def on_distance_labels_visibility_changed(self, visible):
+        preferences.mostrar_distancias_grafo = visible
+        self._apply_distance_labels_preference()
+        estado = "visibles" if visible else "ocultas"
+        self.status_label.setText(f"Status: Distancias {estado}")
+
+    def _apply_distance_labels_preference(self):
+        visible = preferences.mostrar_distancias_grafo
+        for page in (self.planificador_page, self.viaje_dinamico_page):
+            page.graph_view.mostrar_etiquetas(visible)
 
     def on_route_calculated(self, payload):
         self.last_route_payload = payload
